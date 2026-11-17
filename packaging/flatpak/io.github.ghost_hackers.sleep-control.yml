@@ -1,0 +1,43 @@
+app-id: io.github.ghost_hackers.sleep-control
+runtime: org.kde.Platform
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+base: com.riverbankcomputing.PyQt.BaseApp
+base-version: '6.11'
+command: sleep-control
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --system-talk-name=org.freedesktop.login1
+cleanup-commands:
+  - /app/cleanup-BaseApp.sh
+modules:
+  - name: sleep-control
+    buildsystem: simple
+    build-commands:
+      # Ship the .py files only, compiled to hash-based .pyc.
+      # The tests need D-Bus and run before the build; here we only check the imports.
+      - install -Dm644 -t /app/share/sleep-control/sleep_control src/sleep_control/*.py
+      - PYTHONPATH=/app/share/sleep-control python3 -B -c 'import sleep_control.app, sleep_control.backend,
+        sleep_control.cli, sleep_control.commands, sleep_control.ipc, sleep_control.state'
+      - python3 -m compileall -q -f --invalidation-mode unchecked-hash /app/share/sleep-control
+      - install -Dm755 packaging/flatpak/sleep-control.sh /app/bin/sleep-control
+      - install -Dm644 -t /app/share/sleep-control/icons data/icons/tray-*.svg
+      - install -Dm644 -t /app/share/sleep-control/icons data/icons/${FLATPAK_ID}.svg
+      - install -Dm644 -t /app/share/icons/hicolor/scalable/apps data/icons/${FLATPAK_ID}.svg
+      - install -Dm644 -t /app/share/applications data/${FLATPAK_ID}.desktop
+      - install -Dm644 -t /app/share/metainfo data/${FLATPAK_ID}.metainfo.xml
+      - install -Dm644 LICENSE /app/share/licenses/${FLATPAK_ID}/LICENSE
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - dist
+          - prereleases
+          - releases
+          - archive
+          - var
+          - .flatpak-builder
+          - .git

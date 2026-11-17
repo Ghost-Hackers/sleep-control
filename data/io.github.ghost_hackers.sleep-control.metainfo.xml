@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ghost_hackers.sleep-control</id>
+  <name>Sleep Control</name>
+  <summary>Keep the computer awake, or let it sleep again</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary=https://github.com/Ghost-Hackers/sleep-control/blob/master/LICENSE</project_license>
+  <developer id="io.github.ghost_hackers">
+    <name>Ghost-Hackers</name>
+  </developer>
+  <description>
+    <p>
+      Sleep Control stops the computer from going to sleep while something long runs, such as a
+      download, a backup or a game update. Turn it off again and the computer sleeps as your power
+      settings say.
+    </p>
+    <p>
+      It sits in the system tray and shows whether sleep is blocked. Pick Keep awake, Allow sleep
+      or Sleep now from the tray menu, from the app window, or from a terminal. The block is asked
+      for through the desktop's Inhibit portal and ends as soon as the app quits.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.ghost_hackers.sleep-control.desktop</launchable>
+  <provides>
+    <binary>sleep-control</binary>
+  </provides>
+  <url type="homepage">https://github.com/Ghost-Hackers/sleep-control</url>
+  <url type="bugtracker">https://github.com/Ghost-Hackers/sleep-control/issues</url>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0-beta.1" date="2026-11-16" type="development">
+      <description>
+        <p>First beta of the Flatpak app: tray icon, window and terminal commands, with the block held through the Inhibit portal.</p>
+      </description>
+    </release>
+  </releases>
+</component>

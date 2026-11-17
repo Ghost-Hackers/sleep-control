@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Application
+Name=Sleep Control
+GenericName=Keep Awake
+Comment=Keep the computer awake, or let it sleep again
+Icon=io.github.ghost_hackers.sleep-control
+Exec=sleep-control
+Terminal=false
+Categories=Utility;
+Keywords=sleep;suspend;awake;caffeine;inhibit;power;
+StartupNotify=true
+Actions=keep-awake;allow-sleep;
+
+[Desktop Action keep-awake]
+Name=Keep awake
+Exec=sleep-control on
+
+[Desktop Action allow-sleep]
+Name=Allow sleep
+Exec=sleep-control off
