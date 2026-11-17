@@ -140,6 +140,22 @@ class InstanceTest(unittest.TestCase):
         out, err = cli.communicate(timeout=30)
         self.assertEqual((cli.returncode, out, err), (0, "Sleep is allowed\n", ""))
 
+    def test_stuck_instance_keeps_its_socket(self) -> None:
+        # A stopped instance takes connections but never answers, like one whose Qt
+        # thread waits on a slow portal call. A new launch must not take its place.
+        first = self.start("--background")
+        inode = os.stat(self.sock).st_ino
+        os.kill(first.pid, signal.SIGSTOP)
+        try:
+            second = procs.App(self, self.runtime, "--background", private_bus=True)
+            self.assertEqual(second.wait_exit(timeout=30), 1, second.output())
+            self.assertIn("can't reach the running instance", second.output())
+            self.assertEqual(os.stat(self.sock).st_ino, inode)
+            self.assertEqual(procs.app_pids(self.runtime), [first.pid])
+        finally:
+            os.kill(first.pid, signal.SIGCONT)
+        self.assertEqual(self.ask(b"status\n"), b"ok Sleep is allowed\n")
+
     def test_unwritable_app_folder(self) -> None:
         folder = os.path.dirname(self.sock)
         os.makedirs(folder, mode=0o700)
@@ -153,6 +169,21 @@ class InstanceTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn("Sleep Control didn't start", r.stderr)
         self.assertLess(time.monotonic() - started, 10, "the command waited for an instance that had exited")
+
+    def test_app_folder_made_read_only_after_a_run(self) -> None:
+        # The lock file stays when an instance quits, so the lock still opens and binding the socket fails.
+        app = self.start("--background")
+        os.kill(app.pid, signal.SIGTERM)
+        self.assertEqual(app.wait_exit(), 0)
+        self.assertTrue(os.path.exists(self.sock + ".lock"))
+        folder = os.path.dirname(self.sock)
+        os.chmod(folder, 0o500)
+        self.addCleanup(os.chmod, folder, 0o700)
+        app = procs.App(self, self.runtime, "--background", private_bus=True)
+        self.assertEqual(app.wait_exit(), 1)
+        self.assertIn("PermissionError", app.output())
+        os.chmod(folder, 0o700)
+        self.start("--background")
 
     def test_instance_that_never_answers(self) -> None:
         # The instance connects to the session bus before it listens, so with the bus

@@ -239,13 +239,24 @@ def _log_uncaught(kind: type[BaseException], value: BaseException, tb: Optional[
     traceback.print_exception(kind, value, tb)
 
 
-def run_app(path: str, show_window: bool) -> int:
-    # A second launch hands over to the instance that is already running.
+def _hand_over(path: str, show_window: bool) -> Optional[int]:
+    """Passes the launch to the running instance. Returns None when none listens."""
     try:
         ipc.request(path, "show" if show_window else "status", timeout=5.0)
-        return 0
-    except (ipc.NotRunning, OSError):
-        pass
+    except ipc.NotRunning:
+        return None
+    except OSError as e:
+        # It still owns the socket while it's stuck, so starting another one wouldn't help.
+        print(f"sleep-control: can't reach the running instance: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def run_app(path: str, show_window: bool) -> int:
+    # A second launch hands over to the instance that is already running.
+    code = _hand_over(path, show_window)
+    if code is not None:
+        return code
 
     sys.excepthook = _log_uncaught
     app = QApplication(sys.argv[:1])
@@ -259,9 +270,8 @@ def run_app(path: str, show_window: bool) -> int:
     ui = Ui(app, controller)
     server = ipc.try_listen(path, ui.handle)
     if server is None:
-        # Lost a race with another launch: hand over to it.
-        ipc.request(path, "show" if show_window else "status", timeout=5.0)
-        return 0
+        # Lost a race with another launch. It holds the lock, so it is up even if it doesn't listen yet.
+        return _hand_over(path, show_window) or 0
     notifier = _read_notifier(server.fileno())
     notifier.activated.connect(server.serve_pending)
     signals = _quit_on_signals(app)

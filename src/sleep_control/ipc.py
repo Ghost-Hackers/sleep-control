@@ -3,9 +3,15 @@
 The socket lives in $XDG_RUNTIME_DIR/app/<app id>/, which Flatpak shares between
 every sandbox of this app and nobody else. A request is one line with a command,
 the answer is one line starting with "ok " or "error ".
+
+The instance holds a lock on a file next to the socket for as long as it runs. The
+kernel drops it when the process ends, however it ends, so a socket whose lock is
+free was left behind, and one whose lock is held belongs to a live instance even
+when that instance is too busy to answer.
 """
 
 import errno
+import fcntl
 import os
 import socket
 import traceback
@@ -58,6 +64,17 @@ def request(path: str, command: str, timeout: float = 30.0) -> str:
     return answer
 
 
+def _lock(path: str) -> int:
+    """Locks path for as long as the returned descriptor stays open."""
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        raise AlreadyRunning(path) from None
+    return fd
+
+
 class Server:
     """Listens on the socket. handle(command) returns the answer line."""
 
@@ -65,11 +82,13 @@ class Server:
         self.path = path
         self._handle = handle
         os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+        self._lock = _lock(path + ".lock")
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             self._bind()
         except BaseException:
             self._sock.close()
+            os.close(self._lock)
             raise
         self._sock.listen(8)
         self._sock.setblocking(False)
@@ -83,14 +102,9 @@ class Server:
             except OSError as err:
                 if err.errno != errno.EADDRINUSE:
                     raise
-            try:
-                request(self.path, "status", timeout=2.0)
-            except (NotRunning, OSError):
-                # Left behind by an instance that didn't exit cleanly.
-                os.unlink(self.path)
-                self._sock.bind(self.path)
-                return
-            raise AlreadyRunning(self.path)
+            # The lock is ours, so the instance that made this socket is gone.
+            os.unlink(self.path)
+            self._sock.bind(self.path)
         finally:
             os.umask(old)
 
@@ -130,6 +144,8 @@ class Server:
                 os.unlink(self.path)
         except OSError:
             pass
+        # Last, so no newcomer takes the socket over while it is still in use.
+        os.close(self._lock)
 
 
 def try_listen(path: str, handle: Callable[[str], str]) -> Optional[Server]:
