@@ -122,48 +122,45 @@ class Ui:
         self.icon_normal = tray_icon(icons, "tray-normal")
         self.window = Window(self)
         self.window.setWindowIcon(QIcon(str(icons / f"{APP_ID}.svg")))
-        self.tray: Optional[QSystemTrayIcon] = None
-        if QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray = QSystemTrayIcon()
-            menu = QMenu()
-            self.menu_state = QAction(menu)
-            self.menu_state.setEnabled(False)
-            menu.addAction(self.menu_state)
-            menu.addSeparator()
+        # Made even when there is no tray yet: Qt adds the icon once a tray turns up.
+        self.tray = QSystemTrayIcon()
+        menu = QMenu()
+        self.menu_state = QAction(menu)
+        self.menu_state.setEnabled(False)
+        menu.addAction(self.menu_state)
+        menu.addSeparator()
 
-            def add(text: str, slot: Callable[[], object]) -> None:
-                action = QAction(text, menu)
-                action.triggered.connect(slot)
-                menu.addAction(action)
+        def add(text: str, slot: Callable[[], object]) -> None:
+            action = QAction(text, menu)
+            action.triggered.connect(slot)
+            menu.addAction(action)
 
-            for text, slot in (("Allow sleep", self.allow_sleep), ("Keep awake", self.keep_awake),
-                               ("Sleep now", self.sleep_now)):
-                add(text, slot)
-            menu.addSeparator()
-            add("Show window", self.show_window)
-            add("Quit", self.quit)
-            self._menu = menu
-            self.tray.setContextMenu(menu)
-            self.tray.activated.connect(self._tray_activated)
+        for text, slot in (("Allow sleep", self.allow_sleep), ("Keep awake", self.keep_awake),
+                           ("Sleep now", self.sleep_now)):
+            add(text, slot)
+        menu.addSeparator()
+        add("Show window", self.show_window)
+        add("Quit", self.quit)
+        self._menu = menu
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(self._tray_activated)
         controller.on_change(lambda _awake: self.refresh())
         self.refresh()
-        if self.tray:
-            self.tray.show()
+        self.tray.show()
 
     def refresh(self) -> None:
         text = describe(self.controller.awake)
         self.window.state.setText(text)
         icon = self.icon_awake if self.controller.awake else self.icon_normal
         self.window.state_icon.setPixmap(icon.pixmap(STATE_ICON_SIZE, STATE_ICON_SIZE))
-        if self.tray:
-            self.tray.setIcon(icon)
-            self.tray.setToolTip(f"{APP_NAME}: {text}")
-            self.menu_state.setText(text)
+        self.tray.setIcon(icon)
+        self.tray.setToolTip(f"{APP_NAME}: {text}")
+        self.menu_state.setText(text)
 
     def _report(self, message: str) -> None:
         self.window.error.setText(message)
         self.window.error.setVisible(bool(message))
-        if message and self.tray:
+        if message and QSystemTrayIcon.isSystemTrayAvailable():
             self.tray.showMessage(APP_NAME, message, QSystemTrayIcon.MessageIcon.Warning)
 
     def _do(self, action: Callable[[], object]) -> Optional[str]:
@@ -190,8 +187,8 @@ class Ui:
         self.window.activateWindow()
 
     def window_closed(self) -> None:
-        # Without a tray icon nothing would be left to reach the app, unless it holds a block.
-        if self.tray is None and not self.controller.awake:
+        # Without a tray nothing would be left to reach the app, unless it holds a block.
+        if not QSystemTrayIcon.isSystemTrayAvailable() and not self.controller.awake:
             self.quit()
 
     def _tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
@@ -284,7 +281,7 @@ def run_app(path: str, show_window: bool) -> int:
         server.close()
 
     app.aboutToQuit.connect(shut_down)
-    if show_window or ui.tray is None:
+    if show_window or not QSystemTrayIcon.isSystemTrayAvailable():
         ui.show_window()
     code = app.exec()
     del signals, notifier

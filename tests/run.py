@@ -20,7 +20,7 @@ from collections.abc import Callable
 
 # "any": Linux with Python, PyQt6 and dbus-run-session, as on the CI runner.
 # "kde-session": a logged-in KDE Plasma session on Wayland with the desktop portal,
-# PowerDevil, the tray watcher and logind, as on the developer's machine.
+# PowerDevil, the tray watcher, kded6 and logind, as on the developer's machine.
 # "flatpak": Flatpak with the SDK, runtime and PyQt BaseApp the Flatpak manifest
 # names, and the Flatpak portal on the session bus.
 HOSTS = ("any", "kde-session", "flatpak")
@@ -49,6 +49,9 @@ def missing_for(host: str) -> list[str]:
         return sandbox_missing() + portal
     missing: list[str] = [] if os.environ.get("WAYLAND_DISPLAY") else ["WAYLAND_DISPLAY"]
     missing += [p for p in ("dbus-daemon", "dbus-monitor", "dbus-send", "xdg-dbus-proxy") if not shutil.which(p)]
+    from .procs import kded_modules
+    if not kded_modules():
+        missing.append("kded6 with Plasma's statusnotifierwatcher module")
     missing += [n for n in SESSION_NAMES if not _has_name("--user", n)]
     if not _has_name("--system", "org.freedesktop.login1"):
         missing.append("org.freedesktop.login1")

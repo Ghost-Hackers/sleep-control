@@ -45,49 +45,49 @@ def _int(value: object) -> int:
     return value
 
 
-def _busctl(*args: str) -> object:
-    """The reply's data: the out values of a call, the value of a property."""
+def _busctl(bus: str, *args: str) -> object:
+    """The reply's data: the out values of a call, the value of a property. bus is --user or --address=..."""
     # "--" keeps busctl from reading a negative argument as an option.
-    out = subprocess.run(["busctl", "--user", "--json=short", "--", *args], capture_output=True, text=True,
+    out = subprocess.run(["busctl", bus, "--json=short", "--", *args], capture_output=True, text=True,
                          check=True, timeout=10).stdout
     return _dict(json.loads(out))["data"] if out.strip() else None
 
 
-def _pid_of(service: str) -> int:
-    data = _busctl("call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+def _pid_of(bus: str, service: str) -> int:
+    data = _busctl(bus, "call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
                    "GetConnectionUnixProcessID", "s", service)
     return _int(_list(data)[0])
 
 
 class Tray:
-    def __init__(self, pid: int, timeout: float = 15.0) -> None:
+    def __init__(self, pid: int, timeout: float = 15.0, bus: str = "--user") -> None:
         """Finds the tray icon registered by process pid."""
+        self.bus = bus
         deadline = time.monotonic() + timeout
         while True:
             for entry in self.registered():
                 service, _, path = entry.partition("/")
-                if _pid_of(service) == pid:
+                if _pid_of(bus, service) == pid:
                     self.service, self.path = service, "/" + path
-                    self.menu = _str(_busctl("get-property", self.service, self.path,
+                    self.menu = _str(_busctl(bus, "get-property", self.service, self.path,
                                              "org.kde.StatusNotifierItem", "Menu"))
                     return
             if time.monotonic() > deadline:
                 raise AssertionError(f"no tray icon from pid {pid}")
             time.sleep(0.2)
 
-    @staticmethod
-    def registered() -> list[str]:
-        data = _busctl("get-property", "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
+    def registered(self) -> list[str]:
+        data = _busctl(self.bus, "get-property", "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
                        "org.kde.StatusNotifierWatcher", "RegisteredStatusNotifierItems")
         return [_str(entry) for entry in _list(data)]
 
     def tooltip(self) -> str:
-        data = _busctl("get-property", self.service, self.path, "org.kde.StatusNotifierItem", "ToolTip")
+        data = _busctl(self.bus, "get-property", self.service, self.path, "org.kde.StatusNotifierItem", "ToolTip")
         return _str(_list(data)[2])
 
     def entries(self) -> dict[str, tuple[int, bool]]:
         """Menu labels (mnemonics removed) to entry IDs, plus each entry's enabled flag."""
-        layout = _list(_busctl("call", self.service, self.menu, "com.canonical.dbusmenu", "GetLayout", "iias",
+        layout = _list(_busctl(self.bus, "call", self.service, self.menu, "com.canonical.dbusmenu", "GetLayout", "iias",
                                "0", "-1", "0"))[1]
         found: dict[str, tuple[int, bool]] = {}
 
@@ -114,9 +114,9 @@ class Tray:
         ident, enabled = self.entries()[label]
         if not enabled:
             raise AssertionError(f"menu entry {label!r} is disabled")
-        _busctl("call", self.service, self.menu, "com.canonical.dbusmenu", "Event", "isvu",
+        _busctl(self.bus, "call", self.service, self.menu, "com.canonical.dbusmenu", "Event", "isvu",
                 str(ident), "clicked", "i", "0", "0")
 
     def activate(self, secondary: bool = False) -> None:
         method = "SecondaryActivate" if secondary else "Activate"
-        _busctl("call", self.service, self.path, "org.kde.StatusNotifierItem", method, "ii", "0", "0")
+        _busctl(self.bus, "call", self.service, self.path, "org.kde.StatusNotifierItem", method, "ii", "0", "0")

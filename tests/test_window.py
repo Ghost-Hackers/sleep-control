@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QSystemTrayIcon, QWidget
 
 from sleep_control import app as app_module
 from sleep_control.backend import DBusBackend
@@ -28,7 +28,7 @@ class WindowTest(unittest.TestCase):
         self.addCleanup(self.controller.allow_sleep)
         self.ui = app_module.Ui(self.qt, self.controller)
         self.addCleanup(self.ui.window.deleteLater)
-        self.assertIsNone(self.ui.tray)
+        self.assertFalse(QSystemTrayIcon.isSystemTrayAvailable())
 
     def quits(self, action: Callable[[], object]) -> bool:
         """Runs action inside the Qt event loop. True when it made the app quit."""

@@ -180,6 +180,50 @@ class PrivateBus:
             time.sleep(0.1)
 
 
+KDED_MODULES = ("/usr/lib/qt6/plugins/kf6/kded", "/usr/lib64/qt6/plugins/kf6/kded",
+                "/usr/lib/x86_64-linux-gnu/qt6/plugins/kf6/kded")
+WATCHER = "statusnotifierwatcher"
+
+
+def kded_modules() -> str:
+    """The folder of kded6's modules if it has Plasma's tray watcher, else ""."""
+    return next((d for d in KDED_MODULES if os.path.exists(os.path.join(d, WATCHER + ".so"))), "")
+
+
+class TrayWatcher:
+    """Plasma's StatusNotifierWatcher, the kded6 module, on a private bus.
+
+    kded6 runs every other module turned off and with its own home and config
+    folders, so it writes nothing outside runtime and doesn't touch the desktop.
+    """
+
+    def __init__(self, test: unittest.TestCase, runtime: str, bus: str) -> None:
+        home = os.path.join(runtime, "kded-home")
+        config = os.path.join(home, ".config")
+        os.makedirs(config)
+        modules = sorted(f.removesuffix(".so") for f in os.listdir(kded_modules()) if f.endswith(".so"))
+        # kded6 still reads its settings from kded5rc.
+        with open(os.path.join(config, "kded5rc"), "w") as f:
+            f.write("[General]\nCheckSycoca=false\n")
+            for m in modules:
+                f.write(f"\n[Module-{m}]\nautoload={'true' if m == WATCHER else 'false'}\n")
+        e = env(runtime, bus=bus)
+        for name in ("WAYLAND_DISPLAY", "DISPLAY"):
+            e.pop(name, None)
+        e.update(HOME=home, XDG_CONFIG_HOME=config, XDG_CACHE_HOME=os.path.join(home, ".cache"),
+                 XDG_DATA_HOME=os.path.join(home, ".local", "share"),
+                 XDG_STATE_HOME=os.path.join(home, ".local", "state"))
+        self.log = open(os.path.join(runtime, "kded.log"), "w")
+        test.addCleanup(self.log.close)
+        self.proc = subprocess.Popen(["kded6"], env=e, cwd=home, stdin=subprocess.DEVNULL, stdout=self.log,
+                                     stderr=subprocess.STDOUT)
+        test.addCleanup(self._end)
+
+    def _end(self) -> None:
+        self.proc.terminate()
+        self.proc.wait(10)
+
+
 def private_cli(runtime: str, *args: str, timeout: float = 60) -> subprocess.CompletedProcess[str]:
     """Runs the command line on a private session bus (see private_bus_cmd)."""
     return subprocess.run(private_bus_cmd(runtime) + [sys.executable, "-m", "sleep_control", *args],

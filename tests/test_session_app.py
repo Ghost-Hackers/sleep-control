@@ -15,6 +15,7 @@ from .tray import Tray
 HOST = "kde-session"
 BLOCKED = "Sleep is blocked (kept awake)"
 ALLOWED = "Sleep is allowed"
+WATCHER = "org.kde.StatusNotifierWatcher"
 
 
 class SessionAppTest(unittest.TestCase):
@@ -105,6 +106,21 @@ class SessionAppTest(unittest.TestCase):
             self.assertEqual(procs.answer(app.runtime, b"status\n"), f"ok {ALLOWED}\n".encode())
         self.assertEqual(app.proc.poll(), None)
         self.assertEqual(self.blocks.wait(0, timeout=3), 0)
+
+    def test_tray_that_starts_after_the_app(self) -> None:
+        # As at login, when the app can start before the panel: a bus with no tray watcher
+        # yet, then Plasma's watcher comes up and the icon has to show up in it.
+        runtime = procs.runtime_dir(self)
+        bus = procs.PrivateBus(self, runtime)
+        app = procs.App(self, runtime, "--background", platform="wayland", bus=bus.address)
+        app.wait_ready()
+        self.assertFalse(bus.has_name(WATCHER))
+        procs.TrayWatcher(self, runtime, bus.address)
+        bus.wait_name(WATCHER)
+        menu = Tray(app.pid, bus=f"--address={bus.address}")
+        self.assertIn(ALLOWED, menu.tooltip())
+        self.assertIn("Show window", menu.entries())
+        self.assertEqual(app.proc.poll(), None)
 
 
 if __name__ == "__main__":
