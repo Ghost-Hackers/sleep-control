@@ -24,7 +24,7 @@ After 0.1.0 the plan is timers and conditions for keeping the PC awake, settings
 
 ## Status
 
-In development. There is no release yet, and no feature described above exists until a release says so.
+Sleep Control is in development and hasn't had a release yet. The features above arrive with 0.1.0.
 
 ## Development tools
 
