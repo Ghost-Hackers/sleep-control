@@ -18,9 +18,9 @@ import tempfile
 import unittest
 from collections.abc import Callable
 
-# "any": Linux with Python, PyQt6 and dbus-run-session, as on the CI runner.
+# "any": Linux with Python, PyQt6, dbus-run-session and strace, as on the CI runner.
 # "kde-session": a logged-in KDE Plasma session on Wayland with the desktop portal,
-# PowerDevil, the tray watcher, kded6 and logind, as on the developer's machine.
+# PowerDevil, the tray watcher, kded6, kwin_wayland and logind, as on the developer's machine.
 # "flatpak": Flatpak with the SDK, runtime and PyQt BaseApp the Flatpak manifest
 # names, and the Flatpak portal on the session bus.
 HOSTS = ("any", "kde-session", "flatpak")
@@ -41,14 +41,15 @@ def _has_name(bus: str, name: str) -> bool:
 def missing_for(host: str) -> list[str]:
     """What the current machine lacks for host. Empty when it can run it."""
     if host == "any":
-        return [p for p in ("dbus-run-session", "dbus-daemon", "prlimit") if not shutil.which(p)]
+        return [p for p in ("dbus-run-session", "dbus-daemon", "prlimit", "strace") if not shutil.which(p)]
     if host == "flatpak":
         # tests/sandbox.py comes with the Flatpak tests, so it is looked up by name.
         sandbox_missing: Callable[[], list[str]] = importlib.import_module(".sandbox", __package__).missing
         portal = [] if _has_name("--user", "org.freedesktop.portal.Flatpak") else ["org.freedesktop.portal.Flatpak"]
         return sandbox_missing() + portal
     missing: list[str] = [] if os.environ.get("WAYLAND_DISPLAY") else ["WAYLAND_DISPLAY"]
-    missing += [p for p in ("dbus-daemon", "dbus-monitor", "dbus-send", "xdg-dbus-proxy") if not shutil.which(p)]
+    missing += [p for p in ("dbus-daemon", "dbus-monitor", "dbus-send", "xdg-dbus-proxy", "kwin_wayland")
+                if not shutil.which(p)]
     from .procs import kded_modules
     if not kded_modules():
         missing.append("kded6 with Plasma's statusnotifierwatcher module")

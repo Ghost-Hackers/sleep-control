@@ -3,6 +3,7 @@
 import signal
 import socket
 import sys
+import time
 import traceback
 from pathlib import Path
 from types import TracebackType
@@ -265,10 +266,16 @@ def run_app(path: str, show_window: bool) -> int:
 
     controller = Controller(DBusBackend())
     ui = Ui(app, controller)
-    server = ipc.try_listen(path, ui.handle)
-    if server is None:
-        # Lost a race with another launch. It holds the lock, so it is up even if it doesn't listen yet.
-        return _hand_over(path, show_window) or 0
+    deadline = time.monotonic() + 5.0
+    while (server := ipc.try_listen(path, ui.handle)) is None:
+        # Lost a race with another launch. It holds the lock but may not listen yet.
+        code = _hand_over(path, show_window)
+        if code is not None:
+            return code
+        if time.monotonic() > deadline:
+            print("sleep-control: another instance is starting and doesn't answer", file=sys.stderr)
+            return 1
+        time.sleep(0.1)
     notifier = _read_notifier(server.fileno())
     notifier.activated.connect(server.serve_pending)
     signals = _quit_on_signals(app)
