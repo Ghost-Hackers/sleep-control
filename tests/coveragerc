@@ -1,0 +1,11 @@
+# Branch coverage of the app, including the app and command line processes the
+# tests start: tools/test.sh --coverage points COVERAGE_PROCESS_START here, and
+# coverage's .pth hook starts measuring in every Python process that sees it.
+[run]
+branch = True
+parallel = True
+source = sleep_control
+
+[report]
+show_missing = True
+skip_covered = True
