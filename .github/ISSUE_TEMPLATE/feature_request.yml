@@ -1,0 +1,23 @@
+name: Feature request
+description: A new action, option or desktop integration.
+labels: ["feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: Your distro and desktop, and where Sleep Control falls short today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you'd like it to do
+      description: The command or option you have in mind and what should happen when you run it.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you do now
+      description: Any workaround you use today, if there is one.

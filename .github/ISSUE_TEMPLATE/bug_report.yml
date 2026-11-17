@@ -1,0 +1,62 @@
+name: Bug report
+description: Sleep Control did something wrong, or something the README says it shouldn't.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report security problems privately through the Security tab (Report a vulnerability), not here.
+  - type: input
+    id: system
+    attributes:
+      label: Distro and desktop
+      description: For example Fedora 44 with KDE Plasma 6.6, or SteamOS 3.8 in desktop mode.
+      placeholder: Arch Linux, GNOME 50 on Wayland
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `flatpak run io.github.ghost_hackers.sleep-control --version`.
+      placeholder: sleep-control 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: Output of the status command
+      description: Run `flatpak run io.github.ghost_hackers.sleep-control status` while the problem is showing.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - Flatpak bundle from a GitHub release
+        - Built from source with tools/build.sh
+        - Something else (say how below)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The commands or clicks, in order.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Include anything it printed and what the status command says.
+    validations:
+      required: true

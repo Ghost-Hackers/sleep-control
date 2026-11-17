@@ -1,0 +1,7 @@
+# LF everywhere: the shell scripts and the Flatpak launcher break with CRLF line endings.
+* text=auto eol=lf
+
+# Binary files: no line-ending changes, no text diffs.
+*.png binary
+*.jpg binary
+*.flatpak binary
