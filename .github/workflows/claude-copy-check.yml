@@ -1,0 +1,20 @@
+# Copied from Ghost-Hackers/ci-workflows@03cea4d1f45eaa24eeed0fd17d248b4da41c8d99 (sha256 a2612bb54a2a84bee3eddf6ea0b4d4e96f004a5481845cf4ceaba04d6006cb7f). Edit it there, not here.
+name: Synced files
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Unchanged
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check that the copied Claude workflows weren't edited
+        run: python3 .github/scripts/check_copy.py
