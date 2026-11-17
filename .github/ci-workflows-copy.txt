@@ -1,0 +1,9 @@
+# Copied from Ghost-Hackers/ci-workflows@91687966dfe61f43321fdf880972ac1e3e901896 (sha256 94fb9c0f1ec101027d861c3b31299404c0e0898d2552a25644fb40d5715c0ff1). Edit it there, not here.
+.github/scripts/check_copy.py
+.github/workflows/changed-files.yml
+.github/workflows/changelog.yml
+.github/workflows/claude-copy-check.yml
+.github/workflows/claude-review.yml
+.github/workflows/claude-security-review.yml
+.github/workflows/claude.yml
+.github/workflows/review-retarget.yml

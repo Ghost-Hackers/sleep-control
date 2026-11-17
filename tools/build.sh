@@ -37,12 +37,12 @@ $ci || tools/test.sh
 work=${SLEEP_CONTROL_BUILD_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/sleep-control-build}
 mkdir -p "$work" dist
 log="$work/flatpak-builder.log"
+inst=--user
 if $ci; then
-  inst=--system
+  # The container's built-in SDK can't always be updated in place, so CI installs its own copy.
   flatpak remote-add "$inst" --if-not-exists flathub "$flathub"
   builder=(flatpak-builder "$inst" --install-deps-from=flathub)
 else
-  inst=--user
   builder=(flatpak run --filesystem="$root:ro" --filesystem="$work" org.flatpak.Builder "$inst")
 fi
 echo "build: flatpak-builder, log in $log"
