@@ -112,8 +112,7 @@ class Sandbox:
         return cmd + [self.build, "/app/bin/sleep-control", *args]
 
     def _coverage(self, rcfile: str) -> list[str]:
-        # Under --coverage, measure the sandbox too. The C tracer is built for the host's
-        # Python, so the sandbox uses the pure-Python one.
+        # Under --coverage, measure the sandbox. The C tracer is built for the host's Python.
         import coverage
         package = os.path.dirname(coverage.__file__)
         link = os.path.join(self.site, "coverage")
