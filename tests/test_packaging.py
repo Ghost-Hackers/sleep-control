@@ -1,4 +1,4 @@
-"""tools/build.sh's checks before it builds."""
+"""tools/build.sh's checks before it builds, and what the manifest installs."""
 
 import pathlib
 import re
@@ -10,6 +10,8 @@ import unittest
 HOST = "any"
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+MANIFEST = ROOT / "packaging" / "flatpak" / "io.github.ghost_hackers.sleep-control.yml"
+ICON_DIR = "/app/share/sleep-control/icons"
 
 
 class BuildCheckTest(unittest.TestCase):
@@ -41,6 +43,20 @@ class BuildCheckTest(unittest.TestCase):
         result = self.dry_run()
         self.assertEqual(result.returncode, 1)
         self.assertIn("expected 9.9.9", result.stderr)
+
+
+class ManifestTest(unittest.TestCase):
+    def installed_icons(self) -> set[str]:
+        names: set[str] = set()
+        for line in MANIFEST.read_text().splitlines():
+            if "install" in line and f"-t {ICON_DIR} " in line:
+                for pattern in line.split(f"-t {ICON_DIR} ", 1)[1].split():
+                    names.update(p.name for p in ROOT.glob(pattern.replace("${FLATPAK_ID}", MANIFEST.stem)))
+        return names
+
+    def test_installs_every_tray_icon(self) -> None:
+        tray = {p.name for p in (ROOT / "data" / "icons").glob("tray-*.svg")}
+        self.assertEqual(tray - self.installed_icons(), set())
 
 
 if __name__ == "__main__":
