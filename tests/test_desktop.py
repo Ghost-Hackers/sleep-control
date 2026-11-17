@@ -29,6 +29,16 @@ class DesktopTest(unittest.TestCase):
         os.kill(app.pid, signal.SIGTERM)
         self.assertEqual(app.wait_exit(), 0)
 
+    def test_background_launch_without_a_tray_stays_hidden(self) -> None:
+        # What `on` starts. It holds the block with no window; the launcher brings the window up.
+        app = self.app("--background")
+        app.wait_ready()
+        self.desktop.no_window_for(2.0)
+        launch = self.app()
+        self.assertEqual(launch.wait_exit(timeout=30), 0, launch.output())
+        self.desktop.wait_window()
+        self.assertEqual(procs.app_pids(self.runtime), [app.pid])
+
     def test_window_launch_that_loses_the_race_still_opens_the_window(self) -> None:
         # A launch from the menu while `on` starts the app: the other instance has
         # the lock but no socket yet.

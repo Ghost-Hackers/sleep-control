@@ -288,7 +288,9 @@ def run_app(path: str, show_window: bool) -> int:
         server.close()
 
     app.aboutToQuit.connect(shut_down)
-    if show_window or not QSystemTrayIcon.isSystemTrayAvailable():
+    # A launch from the menu opens the window. --background (what `on` starts) stays
+    # hidden even with no tray: the menu entry and the commands still reach it.
+    if show_window:
         ui.show_window()
     code = app.exec()
     del signals, notifier
