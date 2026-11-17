@@ -12,6 +12,8 @@ import contextlib
 import json
 import subprocess
 import time
+from collections.abc import Generator
+from typing import TypedDict
 
 from sleep_control.state import REASON
 
@@ -23,9 +25,17 @@ LOGIN1 = ["busctl", "--system", "call", "org.freedesktop.login1", "/org/freedesk
 TEST_LOCK = "sleep-control-tests"
 
 
-def inhibitions() -> list:
+class Inhibitions(TypedDict):
+    """busctl's JSON for ListInhibitions, a(ss): one [app, reason] pair per inhibition."""
+
+    type: str
+    data: list[list[list[str]]]
+
+
+def inhibitions() -> list[tuple[str, str]]:
     out = subprocess.run(LIST, capture_output=True, text=True, check=True, timeout=10).stdout
-    return [tuple(entry) for entry in json.loads(out)["data"][0]]
+    reply: Inhibitions = json.loads(out)
+    return [(app, reason) for app, reason in reply["data"][0]]
 
 
 def held() -> int:
@@ -36,7 +46,7 @@ def held() -> int:
 class Blocks:
     """Sleep Control's inhibitions taken since this object was made."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.base = held()
 
     def now(self) -> int:
@@ -57,14 +67,14 @@ def can_suspend() -> str:
     return out.split(None, 1)[1].strip().strip('"')
 
 
-def lock_names() -> list:
+def lock_names() -> list[str]:
     out = subprocess.run(["systemd-inhibit", "--list", "--no-pager", "--no-legend"],
                          capture_output=True, text=True, check=True, timeout=10).stdout
     return [line.split()[0] for line in out.splitlines() if line.strip()]
 
 
 @contextlib.contextmanager
-def sleep_blocked():
+def sleep_blocked() -> Generator[None]:
     """Holds a logind block lock on sleep for the test's own use.
 
     Since systemd 257 logind refuses Suspend() while any block lock on sleep is

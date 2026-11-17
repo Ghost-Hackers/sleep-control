@@ -19,13 +19,13 @@ Thanks for helping with Sleep Control. Every change starts with an issue, so ope
 
 ## Development tools
 
-Set up the tools once. [`tools/setup-dev.sh`](tools/setup-dev.sh) creates `.venv` with the versions pinned in [`requirements-dev.txt`](requirements-dev.txt) (PyQt6, Ruff and ShellCheck):
+Set up the tools once. [`tools/setup-dev.sh`](tools/setup-dev.sh) creates `.venv` with the versions pinned in [`requirements-dev.txt`](requirements-dev.txt) (PyQt6, Ruff, Pyright and ShellCheck):
 
 ```sh
 tools/setup-dev.sh
 ```
 
-[`tools/test.sh`](tools/test.sh) runs the tests and [`tools/lint.sh`](tools/lint.sh) runs Ruff on `src` and `tests` and ShellCheck on the shell scripts. Both use `.venv` when it exists; set `PYTHON` to use a different interpreter.
+[`tools/test.sh`](tools/test.sh) runs the tests and [`tools/lint.sh`](tools/lint.sh) runs Ruff on `src` and `tests`, Pyright in strict mode on the Python code (see [`pyrightconfig.json`](pyrightconfig.json)) and ShellCheck on the shell scripts. Both use `.venv` when it exists; set `PYTHON` to use a different interpreter.
 
 ## Making a change
 

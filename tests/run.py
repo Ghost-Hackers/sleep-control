@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from collections.abc import Callable
 
 # "any": Linux with Python, PyQt6 and dbus-run-session, as on the CI runner.
 # "kde-session": a logged-in KDE Plasma session on Wayland with the desktop portal,
@@ -37,15 +38,16 @@ def _has_name(bus: str, name: str) -> bool:
     return result.returncode == 0 and result.stdout.strip() == "b true"
 
 
-def missing_for(host: str) -> list:
+def missing_for(host: str) -> list[str]:
     """What the current machine lacks for host. Empty when it can run it."""
     if host == "any":
         return [p for p in ("dbus-run-session", "dbus-daemon", "prlimit") if not shutil.which(p)]
     if host == "flatpak":
-        from .sandbox import missing
+        # tests/sandbox.py comes with the Flatpak tests, so it is looked up by name.
+        sandbox_missing: Callable[[], list[str]] = importlib.import_module(".sandbox", __package__).missing
         portal = [] if _has_name("--user", "org.freedesktop.portal.Flatpak") else ["org.freedesktop.portal.Flatpak"]
-        return missing() + portal
-    missing = [] if os.environ.get("WAYLAND_DISPLAY") else ["WAYLAND_DISPLAY"]
+        return sandbox_missing() + portal
+    missing: list[str] = [] if os.environ.get("WAYLAND_DISPLAY") else ["WAYLAND_DISPLAY"]
     missing += [p for p in ("dbus-daemon", "dbus-monitor", "dbus-send", "xdg-dbus-proxy") if not shutil.which(p)]
     missing += [n for n in SESSION_NAMES if not _has_name("--user", n)]
     if not _has_name("--system", "org.freedesktop.login1"):
@@ -53,19 +55,19 @@ def missing_for(host: str) -> list:
     return missing
 
 
-def modules() -> dict:
+def modules() -> dict[str, str]:
     """Maps each test module name to its HOST."""
-    found = {}
+    found: dict[str, str] = {}
     for path in sorted(pathlib.Path(__file__).parent.glob("test_*.py")):
         name = f"tests.{path.stem}"
-        host = getattr(importlib.import_module(name), "HOST", None)
-        if host not in HOSTS:
+        host: object = getattr(importlib.import_module(name), "HOST", None)
+        if not isinstance(host, str) or host not in HOSTS:
             raise SystemExit(f"test: {name} sets HOST to {host!r}, expected one of {', '.join(HOSTS)}")
         found[name] = host
     return found
 
 
-def main(argv: list) -> int:
+def main(argv: list[str]) -> int:
     run_all = "--all" in argv
     asked = [a for a in argv if a != "--all"]
     catalogue = modules()

@@ -10,20 +10,20 @@ class BackendError(Exception):
 
 
 class PowerBackend(Protocol):
-    def inhibit(self, reason: str) -> str:
-        """Blocks suspend and idle. Returns a handle for release()."""
+    # Blocks suspend and idle. Returns a handle for release().
+    def inhibit(self, reason: str) -> str: ...
 
-    def release(self, handle: str) -> None:
-        """Ends the block taken by inhibit()."""
+    # Ends the block taken by inhibit().
+    def release(self, handle: str) -> None: ...
 
-    def suspend(self) -> None:
-        """Suspends the machine now."""
+    # Suspends the machine now.
+    def suspend(self) -> None: ...
 
 
 class Controller:
     """Holds at most one inhibit at a time and tells listeners when it changes."""
 
-    def __init__(self, backend: PowerBackend):
+    def __init__(self, backend: PowerBackend) -> None:
         self._backend = backend
         self._handle: Optional[str] = None
         self._listeners: List[Callable[[bool], None]] = []
