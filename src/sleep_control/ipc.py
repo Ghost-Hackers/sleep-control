@@ -23,10 +23,6 @@ COMMANDS = ("on", "off", "now", "status", "show")
 MAX_LINE = 64
 
 
-class AlreadyRunning(Exception):
-    """Another instance owns the socket."""
-
-
 class NotRunning(Exception):
     """No instance answers on the socket."""
 
@@ -64,25 +60,27 @@ def request(path: str, command: str, timeout: float = 30.0) -> str:
     return answer
 
 
-def _lock(path: str) -> int:
-    """Locks path for as long as the returned descriptor stays open."""
-    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+def claim(path: str) -> Optional[int]:
+    """Takes the instance lock for the socket at path, held while the returned
+    descriptor stays open. Returns None when another instance holds it."""
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    fd = os.open(path + ".lock", os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         os.close(fd)
-        raise AlreadyRunning(path) from None
+        return None
     return fd
 
 
 class Server:
-    """Listens on the socket. handle(command) returns the answer line."""
+    """Listens on the socket. lock is the descriptor from claim(), which the server
+    closes with the socket. handle(command) returns the answer line."""
 
-    def __init__(self, path: str, handle: Callable[[str], str]) -> None:
+    def __init__(self, path: str, lock: int, handle: Callable[[str], str]) -> None:
         self.path = path
         self._handle = handle
-        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-        self._lock = _lock(path + ".lock")
+        self._lock = lock
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             self._bind()
@@ -146,11 +144,3 @@ class Server:
             pass
         # Last, so no newcomer takes the socket over while it is still in use.
         os.close(self._lock)
-
-
-def try_listen(path: str, handle: Callable[[str], str]) -> Optional[Server]:
-    """Returns a Server, or None when another instance already listens."""
-    try:
-        return Server(path, handle)
-    except AlreadyRunning:
-        return None

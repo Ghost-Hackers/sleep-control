@@ -255,6 +255,18 @@ def run_app(path: str, show_window: bool) -> int:
     code = _hand_over(path, show_window)
     if code is not None:
         return code
+    # The lock comes before the session bus, which can stall, so later launches
+    # find this instance and hand over or give up instead of piling up.
+    deadline = time.monotonic() + 5.0
+    while (lock := ipc.claim(path)) is None:
+        # Lost a race with another launch. It holds the lock but may not listen yet.
+        code = _hand_over(path, show_window)
+        if code is not None:
+            return code
+        if time.monotonic() > deadline:
+            print("sleep-control: another instance is starting and doesn't answer", file=sys.stderr)
+            return 1
+        time.sleep(0.1)
 
     sys.excepthook = _log_uncaught
     app = QApplication(sys.argv[:1])
@@ -266,16 +278,7 @@ def run_app(path: str, show_window: bool) -> int:
 
     controller = Controller(DBusBackend())
     ui = Ui(app, controller)
-    deadline = time.monotonic() + 5.0
-    while (server := ipc.try_listen(path, ui.handle)) is None:
-        # Lost a race with another launch. It holds the lock but may not listen yet.
-        code = _hand_over(path, show_window)
-        if code is not None:
-            return code
-        if time.monotonic() > deadline:
-            print("sleep-control: another instance is starting and doesn't answer", file=sys.stderr)
-            return 1
-        time.sleep(0.1)
+    server = ipc.Server(path, lock, ui.handle)
     notifier = _read_notifier(server.fileno())
     notifier.activated.connect(server.serve_pending)
     signals = _quit_on_signals(app)

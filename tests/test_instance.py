@@ -202,6 +202,30 @@ class InstanceTest(unittest.TestCase):
         os.kill(waiting[0], signal.SIGKILL)
         self.assertTrue(procs.wait_gone(waiting))
 
+    def test_launches_while_the_bus_stalls_leave_one_instance(self) -> None:
+        # The stopped bus daemon takes connections and never answers, so the first
+        # instance waits on it. Later launches have to see it and leave.
+        bus = procs.PrivateBus(self, self.runtime)
+        bus.stop()
+        first = procs.App(self, self.runtime, "--background", bus=bus.address)
+        deadline = time.monotonic() + 20
+        while procs.lock_holder(self.runtime) == 0 and time.monotonic() < deadline:
+            time.sleep(0.05)
+        on = subprocess.Popen([sys.executable, "-m", "sleep_control", "on"],
+                              env=procs.env(self.runtime, bus=bus.address), cwd=procs.ROOT,
+                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        later = [procs.App(self, self.runtime, *args, bus=bus.address) for args in (["--background"], [], [])]
+        _, err = on.communicate(timeout=60)
+        self.assertEqual(on.returncode, 1)
+        self.assertIn("Sleep Control didn't start", err)
+        deadline = time.monotonic() + 15
+        while procs.app_pids(self.runtime) != [first.pid] and time.monotonic() < deadline:
+            time.sleep(0.1)
+        self.assertEqual(procs.app_pids(self.runtime), [first.pid], "later launches piled up behind the stalled bus")
+        for app in later:
+            self.assertEqual(app.wait_exit(), 1, app.output())
+            self.assertIn("another instance is starting and doesn't answer", app.output())
+
     def test_starting_the_instance_fails(self) -> None:
         # RLIMIT_NPROC 0: the kernel refuses every new process of this user, so the
         # command line can't start an instance.
