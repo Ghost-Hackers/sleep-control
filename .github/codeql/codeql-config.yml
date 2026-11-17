@@ -1,0 +1,4 @@
+name: sleep-control CodeQL config
+
+queries:
+  - uses: security-and-quality

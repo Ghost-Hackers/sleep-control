@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the dev tools
+        run: tools/setup-dev.sh
+
+      - name: Show the versions
+        run: |
+          .venv/bin/ruff --version
+          .venv/bin/shellcheck --version
+
+      - name: Lint the Python and shell files
+        run: tools/lint.sh
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # D-Bus for each app under test, strace for the race tests, and what PyQt6 needs offscreen.
+      - name: Install the system packages
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends dbus-bin dbus-daemon libegl1 libfontconfig1 libxkbcommon0 strace
+
+      - name: Install the dev tools
+        run: tools/setup-dev.sh
+
+      # No desktop session here; tools/test.sh --list names the tests that need one.
+      - name: Run the tests this runner can host
+        run: tools/test.sh
+
+  flatpak:
+    name: Flatpak build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.11
+      options: --privileged
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the Flatpak
+        run: tools/build.sh --ci
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sleep-control-ci-flatpak
+          path: dist/*.flatpak
+          if-no-files-found: error
