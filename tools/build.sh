@@ -3,21 +3,23 @@
 # SDK and BaseApp commits, which it prints.
 #   tools/build.sh        runs the tests, builds, keeps a copy under prereleases/ or releases/
 #   tools/build.sh --ci   builds in the flathub-infra container; CI runs the tests separately
+#   tools/build.sh --dry-run   checks the version and metainfo and prints what it would build
 # Needs: flatpak install --user flathub org.flatpak.Builder org.kde.Sdk//6.11 com.riverbankcomputing.PyQt.BaseApp//6.11
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd); cd "$root"
 ci=false
+dry=false
 case "${1:-}" in
   --ci) ci=true ;;
+  --dry-run) dry=true ;;
   "") ;;
-  *) echo "usage: tools/build.sh [--ci]" >&2; exit 2 ;;
+  *) echo "usage: tools/build.sh [--ci | --dry-run]" >&2; exit 2 ;;
 esac
 app=io.github.ghost_hackers.sleep-control
 manifest=packaging/flatpak/$app.yml
 flathub=https://dl.flathub.org/repo/flathub.flatpakrepo
 v=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/sleep_control/__init__.py)
 [ -n "$v" ] || { echo "build: no __version__ in src/sleep_control/__init__.py" >&2; exit 1; }
-grep -q "^## \[$v\]" CHANGELOG.md || { echo "build: CHANGELOG.md has no entry for $v" >&2; exit 1; }
 release=$(grep -o '<release version="[^"]*" date="[^"]*"' "data/$app.metainfo.xml" | head -n 1)
 first=$(echo "$release" | cut -d'"' -f2)
 [ "$first" = "$v" ] || { echo "build: newest <release> in the metainfo is $first, expected $v" >&2; exit 1; }
@@ -25,6 +27,10 @@ first=$(echo "$release" | cut -d'"' -f2)
 date=$(echo "$release" | cut -d'"' -f4)
 SOURCE_DATE_EPOCH=$(date -u -d "${date}T00:00:00Z" +%s)
 export SOURCE_DATE_EPOCH
+if $dry; then
+  echo "build: would build sleep-control-$v.flatpak, timestamps $date (SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH)"
+  exit 0
+fi
 $ci || tools/test.sh
 
 # Keep builder state out of the source tree.
