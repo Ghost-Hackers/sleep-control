@@ -79,6 +79,9 @@ class WindowTest(unittest.TestCase):
                 self.assertIn(gaps["top"], (app_module.MARGIN, app_module.MARGIN + 1), gaps)
                 self.assertLessEqual(abs(gaps["bottom"] - app_module.BOTTOM_MARGIN), 1, gaps)
 
+    def test_window_has_the_app_icon(self) -> None:
+        self.assertFalse(self.ui.window.windowIcon().isNull())
+
     def test_tray_icons_have_every_size(self) -> None:
         for icon in (self.ui.icon_awake, self.ui.icon_normal):
             for size in (16, 22, 32):
