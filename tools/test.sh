@@ -2,6 +2,7 @@
 # Runs the tests. Every test module names the host it needs (see tests/run.py).
 #   tools/test.sh                 every module this machine can run
 #   tools/test.sh --all           every module; fails if this machine lacks a host
+#   tools/test.sh --list          what a run would take here, and why it would leave the others out
 #   tools/test.sh tests.test_cli  the named modules; fails if this machine lacks their host
 #   tools/test.sh --coverage      every module, then 100% branch coverage of src/sleep_control,
 #                                 apart from the lines listed in tests/unreachable.tsv
