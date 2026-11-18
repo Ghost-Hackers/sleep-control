@@ -134,6 +134,11 @@ def main(argv: list[str]) -> int:
     if unknown:
         print(f"test: no such test module: {', '.join(unknown)}", file=sys.stderr)
         return 2
+    if not list_only:
+        # Session tests count the desktop's inhibitions, so two runs at once would see each other.
+        # The host checks run after the lock is taken, so they see the portal as it is when the run starts.
+        lock = open(os.path.join(tempfile.gettempdir(), f"sleep-control-tests-{os.getuid()}.lock"), "w")
+        fcntl.flock(lock, fcntl.LOCK_EX)
     host_missing = {h: missing_for(h) for h in {host for host, _ in catalogue.values()}}
     missing = {m: host_missing[host] + [p for p in needs if not shutil.which(p)]
                for m, (host, needs) in catalogue.items()}
@@ -164,9 +169,6 @@ def main(argv: list[str]) -> int:
         print("\n".join(chosen))
         print(f"test: would run {suite.countTestCases()} tests in {len(chosen)} modules for hosts {hosts}")
         return 0
-    # Session tests count the desktop's inhibitions, so two runs at once would see each other.
-    lock = open(os.path.join(tempfile.gettempdir(), f"sleep-control-tests-{os.getuid()}.lock"), "w")
-    fcntl.flock(lock, fcntl.LOCK_EX)
     result = unittest.TextTestRunner(verbosity=1).run(suite)
     print(f"test: {result.testsRun} tests in {len(chosen)} modules for hosts {hosts}")
     return 0 if result.wasSuccessful() else 1
