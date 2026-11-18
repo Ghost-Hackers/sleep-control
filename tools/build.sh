@@ -28,10 +28,11 @@ try:
     r = next(ET.parse(sys.argv[1]).iter("release"), None)
 except (OSError, ET.ParseError) as e:
     sys.exit(f"build: {sys.argv[1]}: {e}")
-print(*((r.get("version", ""), r.get("date", "")) if r is not None else ()))' "data/$app.metainfo.xml") || exit 1
-# Every timestamp is the metainfo release date, midnight UTC.
-read -r first date <<<"$release"
+print("" if r is None else r.get("version", "") + "|" + r.get("date", ""))' "data/$app.metainfo.xml") || exit 1
+IFS='|' read -r first date <<<"$release"
 [ "$first" = "$v" ] || { echo "build: newest <release> in the metainfo is ${first:-missing}, expected $v" >&2; exit 1; }
+# Every timestamp is the metainfo release date, midnight UTC.
+[ -n "$date" ] || { echo "build: newest <release> in the metainfo has no date" >&2; exit 1; }
 SOURCE_DATE_EPOCH=$(date -u -d "${date}T00:00:00Z" +%s)
 export SOURCE_DATE_EPOCH
 if $dry; then

@@ -69,6 +69,27 @@ class BuildCheckTest(unittest.TestCase):
         after = self.dry_run()
         self.assertEqual((after.returncode, after.stdout), (0, before.stdout), after.stderr)
 
+    def newest_release(self, attributes: str) -> None:
+        """Puts a release with these attributes ahead of the real ones."""
+        text = self.metainfo.read_text()
+        self.assertIn("<releases>", text)
+        self.metainfo.write_text(text.replace("<releases>", f"<releases>\n    <release {attributes}/>", 1))
+
+    def test_newest_release_without_a_version_is_missing(self) -> None:
+        self.newest_release('date="2030-01-01"')
+        result = self.dry_run()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("build: newest <release> in the metainfo is missing, expected ", result.stderr)
+
+    def test_newest_release_without_a_date_fails(self) -> None:
+        before = self.dry_run()
+        version = re.search(r"sleep-control-(.+)\.flatpak", before.stdout)
+        assert version is not None
+        self.newest_release(f'version="{version.group(1)}"')
+        result = self.dry_run()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("build: newest <release> in the metainfo has no date", result.stderr)
+
     def test_metainfo_that_is_not_xml_fails_with_the_parser_error(self) -> None:
         self.metainfo.write_text(self.metainfo.read_text().replace("</component>", ""))
         result = self.dry_run()
