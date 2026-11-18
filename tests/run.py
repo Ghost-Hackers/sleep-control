@@ -134,11 +134,17 @@ def main(argv: list[str]) -> int:
     if unknown:
         print(f"test: no such test module: {', '.join(unknown)}", file=sys.stderr)
         return 2
-    if not list_only:
-        # Session tests count the desktop's inhibitions, so two runs at once would see each other.
-        # The host checks run after the lock is taken, so they see the portal as it is when the run starts.
-        lock = open(os.path.join(tempfile.gettempdir(), f"sleep-control-tests-{os.getuid()}.lock"), "w")
+    if list_only:
+        return _run(catalogue, asked, run_all, list_only)
+    # Session tests count the desktop's inhibitions, so two runs at once would see each other.
+    # The host checks run after the lock is taken, so they see the portal as it is when the run starts.
+    with open(os.path.join(tempfile.gettempdir(), f"sleep-control-tests-{os.getuid()}.lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        return _run(catalogue, asked, run_all, list_only)
+
+
+def _run(catalogue: dict[str, tuple[str, tuple[str, ...]]], asked: list[str], run_all: bool, list_only: bool) -> int:
+    """Checks the hosts, then lists or runs the chosen modules."""
     host_missing = {h: missing_for(h) for h in {host for host, _ in catalogue.values()}}
     missing = {m: host_missing[host] + [p for p in needs if not shutil.which(p)]
                for m, (host, needs) in catalogue.items()}
