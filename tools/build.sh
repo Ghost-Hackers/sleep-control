@@ -20,11 +20,16 @@ manifest=packaging/flatpak/$app.yml
 flathub=https://dl.flathub.org/repo/flathub.flatpakrepo
 v=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/sleep_control/__init__.py)
 [ -n "$v" ] || { echo "build: no __version__ in src/sleep_control/__init__.py" >&2; exit 1; }
-release=$(grep -o '<release version="[^"]*" date="[^"]*"' "data/$app.metainfo.xml" | head -n 1)
-first=$(echo "$release" | cut -d'"' -f2)
-[ "$first" = "$v" ] || { echo "build: newest <release> in the metainfo is $first, expected $v" >&2; exit 1; }
+# shellcheck source=tools/env.sh
+. tools/env.sh
+# Parsed as XML, so a release inside a comment doesn't count.
+release=$("$PYTHON" -c 'import sys, xml.etree.ElementTree as ET
+r = next(ET.parse(sys.argv[1]).iter("release"), None)
+print(*((r.get("version", ""), r.get("date", "")) if r is not None else ()))' "data/$app.metainfo.xml" 2>/dev/null) \
+  || { echo "build: data/$app.metainfo.xml is not valid XML" >&2; exit 1; }
 # Every timestamp is the metainfo release date, midnight UTC.
-date=$(echo "$release" | cut -d'"' -f4)
+read -r first date <<<"$release"
+[ "$first" = "$v" ] || { echo "build: newest <release> in the metainfo is ${first:-missing}, expected $v" >&2; exit 1; }
 SOURCE_DATE_EPOCH=$(date -u -d "${date}T00:00:00Z" +%s)
 export SOURCE_DATE_EPOCH
 if $dry; then
