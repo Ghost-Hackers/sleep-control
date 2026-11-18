@@ -44,6 +44,21 @@ class TagCheckTest(unittest.TestCase):
         self.release("0.2.0-beta.1")
         self.assertEqual(self.check("v0.2.0-beta.1").returncode, 0)
 
+    def test_versions_in_the_release_scheme_pass(self) -> None:
+        for version in ("0.2.0", "10.20.30", "0.2.0-alpha.1", "0.2.0-beta.12", "1.0.0-rc.2"):
+            with self.subTest(version=version):
+                self.release(version)
+                self.assertEqual(self.check(f"v{version}").returncode, 0)
+
+    def test_version_outside_the_release_scheme_fails(self) -> None:
+        for version in ("not-semver", "1.2", "1.2.3.4", "01.2.3", "1.2.3-dev.1", "1.2.3-beta", "1.2.3-beta.0",
+                        "1.2.3+build"):
+            with self.subTest(version=version):
+                self.release(version)
+                result = self.check(f"v{version}")
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(f"version {version} is not X.Y.Z or X.Y.Z-(alpha|beta|rc).N", result.stderr)
+
     def test_tag_for_another_version_fails(self) -> None:
         result = self.check("v0.3.0")
         self.assertEqual(result.returncode, 1)
