@@ -14,6 +14,7 @@ import unittest
 from . import procs, run
 
 HOST = "kde-session"
+NEEDS = ("prlimit", "dbus-update-activation-environment")
 
 
 class PortalFilesTest(unittest.TestCase):

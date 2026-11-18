@@ -64,6 +64,13 @@ class RunnerTest(unittest.TestCase):
         self.assertIn("test: tests.test_instance_race needs the any host and strace; missing here: strace", r.stderr)
         self.assertNotIn(" tests in ", r.stdout)
 
+    def test_portal_module_names_the_programs_it_runs(self) -> None:
+        r = self.run_tests(self.path_without("prlimit", "dbus-update-activation-environment"), "--list")
+        line = next((x for x in r.stderr.splitlines()
+                     if x.startswith("test: not run here: tests.test_portal_files ")), "")
+        self.assertIn("needs the kde-session host and prlimit and dbus-update-activation-environment; missing: ", line)
+        self.assertTrue(line.endswith(", prlimit, dbus-update-activation-environment"), line)
+
     def test_name_pid_without_busctl_is_none(self) -> None:
         r = subprocess.run([sys.executable, "-c",
                             "from tests import run; print(run.name_pid('--user', 'org.freedesktop.DBus'))"],
