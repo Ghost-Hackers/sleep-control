@@ -29,8 +29,11 @@ from typing import Optional, cast
 # names, and the Flatpak portal on the session bus.
 HOSTS = ("any", "kde-session", "flatpak")
 
-SESSION_NAMES = ("org.freedesktop.portal.Desktop", "org.kde.Solid.PowerManagement",
-                 "org.kde.StatusNotifierWatcher")
+PORTAL = "org.freedesktop.portal.Desktop"
+SESSION_NAMES = (PORTAL, "org.kde.Solid.PowerManagement", "org.kde.StatusNotifierWatcher")
+
+# A full session run leaves about 8 descriptors open in the portal.
+PORTAL_FREE_FDS = 64
 
 
 def _has_name(bus: str, name: str) -> bool:
@@ -40,6 +43,35 @@ def _has_name(bus: str, name: str) -> bool:
                              "org.freedesktop.DBus", "NameHasOwner", "s", name],
                             capture_output=True, text=True, timeout=10)
     return result.returncode == 0 and result.stdout.strip() == "b true"
+
+
+def name_pid(bus: str, name: str) -> Optional[int]:
+    """The pid of the process that owns name on bus (a busctl bus option), or None when nobody does."""
+    if not shutil.which("busctl"):
+        return None
+    result = subprocess.run(["busctl", bus, "call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
+                             "org.freedesktop.DBus", "GetConnectionUnixProcessID", "s", name],
+                            capture_output=True, text=True, timeout=10)
+    return int(result.stdout.split()[1]) if result.returncode == 0 else None
+
+
+def open_files(pid: int) -> Optional[tuple[int, int]]:
+    """How many files pid has open and its soft limit on them, or None when /proc doesn't say."""
+    try:
+        count = len(os.listdir(f"/proc/{pid}/fd"))
+        with open(f"/proc/{pid}/limits") as f:
+            limit = next(int(line.split()[3]) for line in f if line.startswith("Max open files"))
+    except OSError:
+        return None
+    return count, limit
+
+
+def portal_files_missing(count: int, limit: int) -> list[str]:
+    """The missing_for entry for a portal with count of limit files open, if that leaves too few free."""
+    if limit - count >= PORTAL_FREE_FDS:
+        return []
+    return [f"xdg-desktop-portal with free file descriptors ({count:,} of {limit:,} open; "
+            "restart it with: systemctl --user restart xdg-desktop-portal)"]
 
 
 def missing_for(host: str) -> list[str]:
@@ -58,6 +90,10 @@ def missing_for(host: str) -> list[str]:
     if not kded_modules():
         missing.append("kded6 with Plasma's statusnotifierwatcher module")
     missing += [n for n in SESSION_NAMES if not _has_name("--user", n)]
+    portal = name_pid("--user", PORTAL)
+    files = open_files(portal) if portal else None
+    if files:
+        missing += portal_files_missing(*files)
     if not _has_name("--system", "org.freedesktop.login1"):
         missing.append("org.freedesktop.login1")
     return missing
