@@ -24,9 +24,11 @@ v=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/sleep_control/__init__.py)
 . tools/env.sh
 # Parsed as XML, so a release inside a comment doesn't count.
 release=$("$PYTHON" -c 'import sys, xml.etree.ElementTree as ET
-r = next(ET.parse(sys.argv[1]).iter("release"), None)
-print(*((r.get("version", ""), r.get("date", "")) if r is not None else ()))' "data/$app.metainfo.xml" 2>/dev/null) \
-  || { echo "build: data/$app.metainfo.xml is not valid XML" >&2; exit 1; }
+try:
+    r = next(ET.parse(sys.argv[1]).iter("release"), None)
+except (OSError, ET.ParseError) as e:
+    sys.exit(f"build: {sys.argv[1]}: {e}")
+print(*((r.get("version", ""), r.get("date", "")) if r is not None else ()))' "data/$app.metainfo.xml") || exit 1
 # Every timestamp is the metainfo release date, midnight UTC.
 read -r first date <<<"$release"
 [ "$first" = "$v" ] || { echo "build: newest <release> in the metainfo is ${first:-missing}, expected $v" >&2; exit 1; }

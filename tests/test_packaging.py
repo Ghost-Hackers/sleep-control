@@ -69,11 +69,17 @@ class BuildCheckTest(unittest.TestCase):
         after = self.dry_run()
         self.assertEqual((after.returncode, after.stdout), (0, before.stdout), after.stderr)
 
-    def test_metainfo_that_is_not_xml_fails(self) -> None:
+    def test_metainfo_that_is_not_xml_fails_with_the_parser_error(self) -> None:
         self.metainfo.write_text(self.metainfo.read_text().replace("</component>", ""))
         result = self.dry_run()
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("is not valid XML", result.stderr)
+        self.assertRegex(result.stderr, r"build: data/\S+\.metainfo\.xml: no element found: line \d+, column \d+")
+
+    def test_missing_metainfo_fails_with_the_reason(self) -> None:
+        self.metainfo.unlink()
+        result = self.dry_run()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertRegex(result.stderr, r"build: data/\S+\.metainfo\.xml: .*No such file or directory")
 
 
 class ManifestTest(unittest.TestCase):
