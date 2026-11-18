@@ -1,0 +1,138 @@
+name: Release
+
+# A version tag builds the bundle, attests it with its checksum and opens a draft release.
+# The notes and the publishing are done by hand.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per tag, never cancelled.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the tag against the version, the changelog and the metainfo
+        env:
+          TAG: ${{ github.ref_name }}
+        run: bash .github/scripts/check_release.sh "$TAG"
+
+      - name: Check the tagged commit is on the default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BRANCH...$GITHUB_SHA" --jq .status)
+          case "$status" in
+            identical | behind) echo "$TAG is on $BRANCH." ;;
+            *) echo "::error::$TAG ($GITHUB_SHA) is not on $BRANCH (compare status: $status)."; exit 1 ;;
+          esac
+
+      # The same packages and steps as the Lint and Tests jobs in ci.yml.
+      - name: Install the system packages
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends dbus-bin dbus-daemon libegl1 libfontconfig1 libxkbcommon0 strace
+
+      - name: Install the dev tools
+        run: tools/setup-dev.sh
+
+      - name: Lint the Python and shell files
+        run: tools/lint.sh
+
+      - name: Run the tests this runner can host
+        run: tools/test.sh
+
+  build:
+    name: Build the bundle
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.11
+      options: --privileged
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The same script as a local build. The log prints the SDK and BaseApp commits.
+      - name: Build the Flatpak bundle
+        run: tools/build.sh --ci
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle
+          path: dist/*.flatpak
+          if-no-files-found: error
+
+  release:
+    name: Attest and draft the release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write          # creates the draft release and uploads its files
+      id-token: write          # asks Sigstore for the signing certificate
+      attestations: write      # stores the attestation with the repository
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Get the bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bundle
+          path: dist
+
+      - name: Write the checksum
+        working-directory: dist
+        run: |
+          name="sleep-control-${TAG#v}.flatpak"
+          test "$(find . -type f | wc -l)" = 1
+          test -f "$name"
+          sha256sum "$name" > "$name.sha256"
+          sha256sum -c ./*.sha256
+
+      - name: Attest the release files
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.flatpak
+            dist/*.sha256
+
+      - name: Open a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=${TAG#v}
+          pre=()
+          case "$version" in *-*) pre=(--prerelease) ;; esac
+          # A re-run finds the draft from the first try and replaces its files.
+          if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != true ]; then
+              echo "::error::A published release for $TAG already exists."
+              exit 1
+            fi
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --draft --verify-tag "${pre[@]}" \
+              --title "sleep-control $version" \
+              --notes "Draft. The release notes go here before this is published."
+          fi
