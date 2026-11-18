@@ -99,6 +99,19 @@ class TagCheckTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("has no <release> for 0.2.0", result.stderr)
 
+    def test_release_inside_an_xml_comment_does_not_count(self) -> None:
+        self.write(METAINFO, '<component>\n  <releases>\n    <!-- <release version="0.2.0" date="2026-12-01"/> -->\n'
+                             '    <release version="0.1.0" date="2026-11-20"/>\n  </releases>\n</component>\n')
+        result = self.check("v0.2.0")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("has no <release> for 0.2.0", result.stderr)
+
+    def test_metainfo_that_is_not_xml_fails(self) -> None:
+        self.write(METAINFO, '<component>\n  <release version="0.2.0" date="2026-12-01">\n')
+        result = self.check("v0.2.0")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("has no <release> for 0.2.0", result.stderr)
+
     def test_missing_version_fails(self) -> None:
         self.write("src/sleep_control/__init__.py", '"""Sleep Control."""\n')
         result = self.check("v0.2.0")
