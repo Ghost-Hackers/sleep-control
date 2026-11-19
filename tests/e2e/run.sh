@@ -34,6 +34,8 @@ result() { # result <case> <ok:0|1> <note>
 check() { # check <case> <got> <want>
   if [ "$2" = "$3" ]; then result "$1" 0 "$2"; else result "$1" 1 "got '$2', want '$3'"; fi
 }
+said() { "${APP[@]}" "$@"; echo "rc=$?"; } # what a command prints, then its exit status
+ok() { printf '%s\nrc=0' "$1"; }           # the same for a command that prints $1 and returns 0
 cli() { # cli <case> <command>: the command has to return 0
   "${APP[@]}" "$2" >/dev/null
   check "$1" "$?" 0
@@ -170,15 +172,17 @@ echo "inhibitions of the app before: $before"
 
 # Command line
 want=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' "$(dirname "$0")/../../src/sleep_control/__init__.py")
-check "--version matches the source" "$("${APP[@]}" --version)" "sleep-control $want"
-check "status with no instance" "$("${APP[@]}" status; echo "rc=$?")" "$(printf 'Sleep is allowed\nrc=0')"
+check "--version matches the source" "$(said --version)" "$(ok "sleep-control $want")"
+check "status with no instance" "$(said status)" "$(ok "Sleep is allowed")"
 check "no instance was started by status" "$(instances)" 0
 
 # Bounded, so a start that hangs fails the check below.
 t0=$SECONDS
 out=$(timeout --kill-after=5 25 flatpak run "$ID" on)
+rc=$?
 took=$((SECONDS - t0))
 note_started
+check "the first on returns 0" "$rc" 0
 check "on starts the app in the background" "$out" "Sleep is blocked (kept awake)"
 if [ "$took" -le 8 ]; then result "on returns within a few seconds" 0 "${took} s"; else result "on returns within a few seconds" 1 "${took} s"; fi
 check "one instance after on" "$(instances)" 1
@@ -187,12 +191,12 @@ check "block appears in PowerDevil's list" "$(ours)" $((before + 1))
 cli "on again returns 0" on
 sleep 6
 check "on twice adds no second block" "$(ours)" $((before + 1))
-check "status says blocked" "$("${APP[@]}" status)" "Sleep is blocked (kept awake)"
+check "status says blocked" "$(said status)" "$(ok "Sleep is blocked (kept awake)")"
 if tray_item >/dev/null; then result "tray item registered" 0 "$(tray_item)"; else result "tray item registered" 1; fi
 cli "off returns 0" off
 wait_ours "$before" 5
 check "off removes the block" "$(ours)" "$before"
-check "status says allowed" "$("${APP[@]}" status)" "Sleep is allowed"
+check "status says allowed" "$(said status)" "$(ok "Sleep is allowed")"
 
 # Second launch
 cli "on before the second launch returns 0" on
@@ -264,7 +268,7 @@ wait_ours "$before" 5
 check "SIGKILL releases the block" "$(ours)" "$before"
 check "SIGKILL leaves the socket behind" "$(find "$RUNTIME" -name '*.sock' 2>/dev/null | wc -l)" 1
 start_app
-check "the app starts again over the stale socket" "$("${APP[@]}" status)" "Sleep is blocked (kept awake)"
+check "the app starts again over the stale socket" "$(said status)" "$(ok "Sleep is blocked (kept awake)")"
 cli "off at the end returns 0" off
 stop_app
 
@@ -291,7 +295,7 @@ if [ -n "$bundle" ]; then
   flatpak uninstall --user -y --delete-data "$ID" >/dev/null 2>&1
   check "--delete-data removes $DATA" "$([ -d "$DATA" ] && echo present || echo gone)" gone
   flatpak install --user -y --bundle "$bundle" >/dev/null 2>&1
-  check "bundle installed again" "$("${APP[@]}" --version)" "sleep-control $want"
+  check "bundle installed again" "$(said --version)" "$(ok "sleep-control $want")"
 else
   echo "uninstall cases not run (pass --reinstall <bundle>)"
 fi
