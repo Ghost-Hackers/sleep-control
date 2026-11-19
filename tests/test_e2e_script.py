@@ -22,7 +22,7 @@ WITH_AN_INSTANCE = r"""
 XDG_RUNTIME_DIR=$2 PYTHONPATH=src QT_QPA_PLATFORM=offscreen dbus-run-session -- "$1" -m sleep_control >/dev/null 2>&1 &
 pid=""
 for _ in $(seq 1 100); do
-  for p in $(pgrep -x python3); do
+  for p in $(pgrep '^python[0-9.]*$'); do
     if tr '\0' ' ' <"/proc/$p/cmdline" | grep -q -- '-m sleep_control'; then pid=$p; fi
   done
   [ -n "$pid" ] && break
@@ -49,11 +49,14 @@ class BeforeTheAppTest(unittest.TestCase):
                               capture_output=True, text=True, timeout=120)
 
     def test_refusal_leaves_a_running_instance_alone(self) -> None:
-        # The script looks for processes named python3.
-        python3 = os.path.join(os.path.dirname(sys.executable), "python3")
-        r = self.run_inside("bash", "-c", WITH_AN_INSTANCE, "bash", python3, self.tmp)
-        self.assertIn("A Sleep Control instance is running. Quit it first; this script starts its own.", r.stderr)
-        self.assertEqual(r.stdout.splitlines(), ["rc 2", "instance alive"], r.stderr)
+        # The sandbox runs the app as python3, a source checkout may run it as python.
+        for name in ("python3", "python"):
+            with self.subTest(interpreter=name):
+                python = os.path.join(os.path.dirname(sys.executable), name)
+                r = self.run_inside("bash", "-c", WITH_AN_INSTANCE, "bash", python, self.tmp)
+                self.assertIn("A Sleep Control instance is running. Quit it first; this script starts its own.",
+                              r.stderr)
+                self.assertEqual(r.stdout.splitlines(), ["rc 2", "instance alive"], r.stderr)
 
     def test_arguments_are_checked_before_anything_runs(self) -> None:
         usage = "usage: tests/e2e/run.sh [--reinstall <bundle>]\n"
