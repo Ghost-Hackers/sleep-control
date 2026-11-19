@@ -60,10 +60,19 @@ stop_started() {
 
 # PowerDevil's inhibitions that belong to the app.
 list_inhibitions() {
-  busctl --user call org.kde.Solid.PowerManagement /org/kde/Solid/PowerManagement/PolicyAgent \
+  busctl --user "$@" call org.kde.Solid.PowerManagement /org/kde/Solid/PowerManagement/PolicyAgent \
     org.kde.Solid.PowerManagement.PolicyAgent ListInhibitions
 }
 ours() { list_inhibitions | grep -o "\"$ID\"" | wc -l; }
+# Other programs' locks, one per line: logind's without this script's own, PowerDevil's without the app's.
+other_locks() {
+  systemd-inhibit --list --no-pager --no-legend | grep -v "^$LOCK_WHO " | tr -s ' ' | sed 's/^/logind /'
+  list_inhibitions --json=short | python3 -I -c '
+import json, sys
+for app, reason in json.load(sys.stdin)["data"][0]:
+    if app != sys.argv[1]:
+        print("powerdevil", app, reason)' "$ID"
+}
 # wait_ours <count> <seconds>: PowerDevil applies a new block after about five seconds.
 wait_ours() {
   local end=$((SECONDS + $2))
@@ -129,8 +138,7 @@ if [ "$(instances)" -ne 0 ]; then
   exit 2
 fi
 list_files "$snap/files-before"
-lock_pattern='Keep awake'
-locks_before=$(systemd-inhibit --list --no-pager | grep -c "$lock_pattern")
+other_locks | sort >"$snap/locks-before"
 before=$(ours)
 echo "inhibitions of the app before: $before"
 
@@ -231,7 +239,9 @@ comm -13 "$snap/files-before" "$snap/files-after" | sed 's/^/  /'
 stray=$(comm -13 "$snap/files-before" "$snap/files-after" | grep "^f $DATA/data/\|^f $RUNTIME/" | grep -vxc "f $RUNTIME/control.sock.lock" || true)
 check "no state or config file of its own" "$stray" 0
 
-check "other sleep locks untouched" "$(systemd-inhibit --list --no-pager | grep -c "$lock_pattern")" "$locks_before"
+gone=$(other_locks | sort | comm -23 "$snap/locks-before" -)
+[ -z "$gone" ] || while read -r line; do echo "  gone: $line"; done <<<"$gone"
+check "other programs' locks still held" "$(echo -n "$gone" | grep -c .)" 0
 
 # Uninstall
 if [ -n "$bundle" ]; then
