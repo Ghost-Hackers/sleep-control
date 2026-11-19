@@ -231,6 +231,7 @@ wait_instances 0 10
 check "SIGKILL ends the app" "$(instances)" 0
 wait_ours "$before" 5
 check "SIGKILL releases the block" "$(ours)" "$before"
+check "SIGKILL leaves the socket behind" "$(find "$RUNTIME" -name '*.sock' 2>/dev/null | wc -l)" 1
 start_app
 check "the app starts again over the stale socket" "$("${APP[@]}" status)" "Sleep is blocked (kept awake)"
 "${APP[@]}" off >/dev/null
