@@ -186,6 +186,8 @@ if systemd-inhibit --list --no-pager | grep -q "$LOCK_WHO" && [ "$state" = inhib
     *) result "now is refused under a block lock" 1 "$err" ;;
   esac
   check "still running after the refused now" "$(instances)" 1
+  wait_ours "$before" 5
+  check "the refused now released the block" "$(ours)" "$before"
 else
   result "now is refused under a block lock" 1 "CanSuspend is '$state' under the lock, now was not called"
 fi
@@ -194,14 +196,16 @@ wait "$holder" 2>/dev/null
 holder=""
 
 # Quit with the block on
-before_quit=$(ours)
+"${APP[@]}" on >/dev/null
+wait_ours $((before + 1)) 10
+check "block on before Quit" "$(ours)" $((before + 1))
 if tray_quit; then
   wait_instances 0 10
   check "Quit in the tray menu ends the app" "$(instances)" 0
   wait_ours "$before" 5
   check "Quit releases the block" "$(ours)" "$before"
 else
-  result "Quit in the tray menu ends the app" 1 "no tray menu to click ($before_quit blocks)"
+  result "Quit in the tray menu ends the app" 1 "no tray menu to click"
 fi
 check "no socket left after Quit" "$(find "$RUNTIME" -name '*.sock' 2>/dev/null | wc -l)" 0
 
@@ -220,6 +224,7 @@ check "no socket left after SIGTERM" "$(find "$RUNTIME" -name '*.sock' 2>/dev/nu
 # SIGKILL of the instance this script started: the app keeps no config to corrupt.
 start_app
 wait_ours $((before + 1)) 10
+check "block on before SIGKILL" "$(ours)" $((before + 1))
 pid=$(app_pids | head -n 1)
 kill -KILL "$pid"
 wait_instances 0 10
