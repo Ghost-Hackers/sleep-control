@@ -133,7 +133,12 @@ list_files() { # list_files <outfile>
   { find "$DATA" "$RUNTIME" -printf '%y %p\n' 2>/dev/null; } | sort >"$1"
 }
 
-start_app() { "${APP[@]}" on >/dev/null 2>&1; wait_instances 1 10; note_started; }
+start_app() {
+  "${APP[@]}" on >/dev/null 2>&1
+  check "on that starts the app returns 0" "$?" 0
+  wait_instances 1 10
+  note_started
+}
 stop_app() { stop_started; wait_instances 0 10; }
 
 # Before anything runs.
