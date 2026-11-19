@@ -46,6 +46,7 @@ fail=0
 holder=""
 started=""
 snap=$(mktemp -d)
+: >"$snap/started"
 
 result() { # result <case> <ok:0|1> <note>
   if [ "$2" -eq 0 ]; then pass=$((pass + 1)); echo "PASS $1${3:+ ($3)}"
@@ -113,6 +114,7 @@ cleanup() {
   # Runs to the end: a second Ctrl-C must not leave the app or the lock behind.
   trap '' INT TERM HUP
   wait_call
+  note_started
   # The app goes before the lock, so a now that is still waiting in it can't suspend the machine.
   if end_started; then
     release_lock
@@ -144,7 +146,7 @@ app_pids() {
 instances() { app_pids | wc -l; }
 # The instances this run started, from the records of its calls. One that was running before, or that someone
 # opens during the run, is never touched.
-note_started() { started=" $(tr '\n' ' ' <"$snap/started" 2>/dev/null)"; }
+note_started() { started=" $(tr '\n' ' ' <"$snap/started")"; }
 stop_started() {
   local p
   for p in $(app_pids); do
