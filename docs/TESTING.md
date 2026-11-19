@@ -35,7 +35,7 @@ tools/test.sh --coverage
 
 ## End-to-end run
 
-[`tests/e2e/run.sh`](../tests/e2e/run.sh) drives the installed Flatpak through `flatpak run`, with a real PowerDevil, tray watcher and logind. It refuses to run while an instance is open and leaves that one alone. Install the release bundle first, quit any copy of the app you have running, then:
+[`tests/e2e/run.sh`](../tests/e2e/run.sh) drives the installed Flatpak through `flatpak run`, with a real PowerDevil, tray watcher and logind. It refuses to run while an instance is open and leaves that one alone. An instance is the process that holds the lock on `$XDG_RUNTIME_DIR/app/io.github.ghost_hackers.sleep-control/control.sock.lock`, which the script reads from `/proc/locks`, and it signals only the instances it started itself. Install the release bundle first, quit any copy of the app you have running, then:
 
 ```sh
 flatpak install --user -y --bundle dist/sleep-control-<version>.flatpak

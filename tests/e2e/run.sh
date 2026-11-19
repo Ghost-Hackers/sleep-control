@@ -92,12 +92,13 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
-# Pids of this user's instances of the app. The sandbox runs it as python3, a source checkout may run it as python.
+# Pids of the app's instances: the holder of the instance lock, from /proc/locks. It lists the locks of this pid
+# namespace only. A line looks like "1: FLOCK  ADVISORY  WRITE 1234 00:4d:5678 0 EOF"; a waiter has "->" after "1:".
 app_pids() {
-  local p
-  for p in $(pgrep -u "$(id -u)" '^python[0-9.]*$'); do
-    if tr '\0' ' ' <"/proc/$p/cmdline" | grep -q -- '-m sleep_control'; then echo "$p"; fi
-  done
+  local major minor inode
+  read -r major minor inode < <(stat -c '%Hd %Ld %i' "$RUNTIME/control.sock.lock" 2>/dev/null) || return 0
+  awk -v file="$(printf '%02x:%02x:%s' "$major" "$minor" "$inode")" \
+    '$2 == "FLOCK" && $3 == "ADVISORY" && $4 == "WRITE" && $5 > 0 && $6 == file { print $5 }' /proc/locks
 }
 instances() { app_pids | wc -l; }
 # The instances this run started. One that was running before is never touched.
@@ -107,6 +108,12 @@ stop_started() {
   for p in $(app_pids); do
     case " $started " in *" $p "*) kill -TERM "$p" 2>/dev/null ;; esac
   done
+}
+# started_pid prints the instance's pid when this run started it, and fails otherwise.
+started_pid() {
+  local p
+  p=$(app_pids | head -n 1)
+  case " $started " in *" $p "*) [ -n "$p" ] && echo "$p" ;; *) return 1 ;; esac
 }
 # Ends them for sure: SIGKILL for one that doesn't answer SIGTERM.
 end_started() {
@@ -290,10 +297,13 @@ check "no socket left after Quit" "$(find "$RUNTIME" -name '*.sock' 2>/dev/null 
 start_app
 wait_ours $((before + 1)) 10
 check "block on before SIGTERM" "$(ours)" $((before + 1))
-pid=$(app_pids | head -n 1)
-kill -TERM "$pid"
-wait_instances 0 10
-check "SIGTERM ends the app" "$(instances)" 0
+if pid=$(started_pid); then
+  kill -TERM "$pid"
+  wait_instances 0 10
+  check "SIGTERM ends the app" "$(instances)" 0
+else
+  result "SIGTERM ends the app" 1 "no instance this run started"
+fi
 wait_ours "$before" 5
 check "SIGTERM releases the block" "$(ours)" "$before"
 check "no socket left after SIGTERM" "$(find "$RUNTIME" -name '*.sock' 2>/dev/null | wc -l)" 0
@@ -302,10 +312,13 @@ check "no socket left after SIGTERM" "$(find "$RUNTIME" -name '*.sock' 2>/dev/nu
 start_app
 wait_ours $((before + 1)) 10
 check "block on before SIGKILL" "$(ours)" $((before + 1))
-pid=$(app_pids | head -n 1)
-kill -KILL "$pid"
-wait_instances 0 10
-check "SIGKILL ends the app" "$(instances)" 0
+if pid=$(started_pid); then
+  kill -KILL "$pid"
+  wait_instances 0 10
+  check "SIGKILL ends the app" "$(instances)" 0
+else
+  result "SIGKILL ends the app" 1 "no instance this run started"
+fi
 wait_ours "$before" 5
 check "SIGKILL releases the block" "$(ours)" "$before"
 check "SIGKILL leaves the socket behind" "$(find "$RUNTIME" -name '*.sock' 2>/dev/null | wc -l)" 1

@@ -18,18 +18,19 @@ NEEDS = ("unshare",)
 SCRIPT = os.path.join(procs.ROOT, "tests", "e2e", "run.sh")
 NAMESPACE = ["unshare", "--user", "--map-current-user", "--pid", "--fork", "--mount-proc"]
 
-# Starts the app from this checkout ($1 is its interpreter), runs the script, and says if the app is still there.
+# Starts the app from this checkout ($1 is its interpreter, the rest are its arguments) in the runtime folder $2, runs
+# the script, and says if the app is still there.
 WITH_AN_INSTANCE = r"""
-XDG_RUNTIME_DIR=$2 PYTHONPATH=src QT_QPA_PLATFORM=offscreen dbus-run-session -- "$1" -m sleep_control >/dev/null 2>&1 &
-pid=""
+python=$1 runtime=$2
+shift 2
+XDG_RUNTIME_DIR=$runtime PYTHONPATH=src QT_QPA_PLATFORM=offscreen dbus-run-session -- "$python" "$@" >/dev/null 2>&1 &
+pid=0
 for _ in $(seq 1 100); do
-  for p in $(pgrep '^python[0-9.]*$'); do
-    if tr '\0' ' ' <"/proc/$p/cmdline" | grep -q -- '-m sleep_control'; then pid=$p; fi
-  done
-  [ -n "$pid" ] && break
+  pid=$("$python" -c 'import sys; from tests import procs; print(procs.lock_holder(sys.argv[1]))' "$runtime")
+  [ "$pid" != 0 ] && break
   sleep 0.2
 done
-[ -n "$pid" ] || { echo "no instance"; exit 1; }
+[ "$pid" != 0 ] || { echo "no instance"; exit 1; }
 bash tests/e2e/run.sh
 echo "rc $?"
 sleep 1
@@ -89,10 +90,17 @@ class BeforeTheAppTest(unittest.TestCase):
         for name in ("python3", "python"):
             with self.subTest(interpreter=name):
                 python = os.path.join(os.path.dirname(sys.executable), name)
-                r = self.run_inside("bash", "-c", WITH_AN_INSTANCE, "bash", python, self.tmp)
+                r = self.run_inside("bash", "-c", WITH_AN_INSTANCE, "bash", python, self.tmp, "-m", "sleep_control")
                 self.assertIn("A Sleep Control instance is running. Quit it first; this script starts its own.",
                               r.stderr)
                 self.assertEqual(r.stdout.splitlines(), ["rc 2", "instance alive"], r.stderr)
+
+    def test_the_instance_is_found_by_its_lock(self) -> None:
+        # Started without "-m sleep_control" on its command line, the instance still holds the lock.
+        start = "import runpy; runpy.run_module('sleep_control', run_name='__main__', alter_sys=True)"
+        r = self.run_inside("bash", "-c", WITH_AN_INSTANCE, "bash", sys.executable, self.tmp, "-c", start)
+        self.assertIn("A Sleep Control instance is running. Quit it first; this script starts its own.", r.stderr)
+        self.assertEqual(r.stdout.splitlines(), ["rc 2", "instance alive"], r.stderr)
 
     def test_an_interrupt_stops_the_run_and_leaves_an_instance_alone(self) -> None:
         # The bus takes the connection and never answers, so busctl waits in the run for 90 seconds.
