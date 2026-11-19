@@ -119,6 +119,14 @@ class BeforeTheAppTest(unittest.TestCase):
                 self.assertEqual(r.stdout.splitlines(), [f"rc {status}", "instance alive"], r.stderr)
                 self.assertEqual(os.listdir(tmpdir), [])
 
+    def test_the_run_needs_powerdevil(self) -> None:
+        # The instance runs in a runtime folder of its own, so it isn't the app's and the script goes on to PowerDevil.
+        other = os.path.join(self.tmp, "other")
+        os.mkdir(other, 0o700)
+        r = self.run_inside("bash", "-c", WITH_AN_INSTANCE, "bash", sys.executable, other, "-m", "sleep_control")
+        message = "tests/e2e/run.sh: PowerDevil doesn't answer on the session bus\n"
+        self.assertEqual((r.stdout.splitlines(), r.stderr), (["rc 2", "instance alive"], message))
+
     def bundle(self, name: str, arch: str, runtime: str) -> str:
         """A bundle file of an empty app with this app's id, built for arch and asking for runtime."""
         tree = os.path.join(self.tmp, f"{name}.tree")

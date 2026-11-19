@@ -47,7 +47,7 @@ It prints PASS or FAIL for each case and a total, and exits 1 when any case fail
 - `--version` matches the version in the source.
 - `status` with no instance reports that sleep is allowed and starts nothing.
 - `on` starts the app in the background and returns within a few seconds.
-- The block shows up in PowerDevil's inhibition list, counting only the app's own entries against the count from before.
+- The block shows up in PowerDevil's inhibition list, counting only the app's own entries against the count from before. Without an answer from PowerDevil the script exits with status 2 before it starts anything, and a later check of the list fails when PowerDevil doesn't answer.
 - `on` twice adds no second block, and `off` removes it.
 - Every `on` and `off` the script runs returns 0.
 - No call of the app runs longer than 60 seconds. One that hangs fails its case.

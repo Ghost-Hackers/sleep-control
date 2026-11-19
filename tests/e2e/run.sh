@@ -145,15 +145,23 @@ list_inhibitions() {
   busctl --user "$@" call org.kde.Solid.PowerManagement /org/kde/Solid/PowerManagement/PolicyAgent \
     org.kde.Solid.PowerManagement.PolicyAgent ListInhibitions
 }
-ours() { list_inhibitions | grep -o "\"$ID\"" | wc -l; }
+# ours prints how many there are. Without an answer from PowerDevil it prints that instead, so no count check passes.
+ours() {
+  local list
+  list=$(list_inhibitions 2>/dev/null) || { echo "no answer from PowerDevil"; return 1; }
+  grep -o "\"$ID\"" <<<"$list" | wc -l
+}
 # Other programs' locks, one per line: logind's without this script's own, PowerDevil's without the app's.
+# Fails without an answer from PowerDevil.
 other_locks() {
+  local list
   systemd-inhibit --list --no-pager --no-legend | grep -v "^$LOCK_WHO " | tr -s ' ' | sed 's/^/logind /'
-  list_inhibitions --json=short | python3 -I -c '
+  list=$(list_inhibitions --json=short 2>/dev/null) || return 1
+  python3 -I -c '
 import json, sys
 for app, reason in json.load(sys.stdin)["data"][0]:
     if app != sys.argv[1]:
-        print("powerdevil", app, reason)' "$ID"
+        print("powerdevil", app, reason)' "$ID" <<<"$list"
 }
 # wait_ours <count> <seconds>: PowerDevil applies a new block after about five seconds.
 wait_ours() {
@@ -224,9 +232,12 @@ if [ "$(instances)" -ne 0 ]; then
   echo "A Sleep Control instance is running. Quit it first; this script starts its own." >&2
   exit 2
 fi
+if ! before=$(ours) || ! locks=$(other_locks); then
+  echo "$0: PowerDevil doesn't answer on the session bus" >&2
+  exit 2
+fi
+sort <<<"$locks" >"$snap/locks-before"
 list_files "$snap/files-before"
-other_locks | sort >"$snap/locks-before"
-before=$(ours)
 echo "inhibitions of the app before: $before"
 
 # Command line
@@ -353,9 +364,13 @@ stray=$(grep "^f $DATA/data/\|^f $DATA/config/\|^f $DATA/.local/state/\|^f $RUNT
   grep -vxc -e "f $RUNTIME/control.sock.lock" -e "f $DATA/config/kdeglobals" || true)
 check "no state or config file of its own" "$stray" 0
 
-gone=$(other_locks | sort | comm -23 "$snap/locks-before" -)
-[ -z "$gone" ] || while read -r line; do echo "  gone: $line"; done <<<"$gone"
-check "other programs' locks still held" "$(echo -n "$gone" | grep -c .)" 0
+if locks=$(other_locks); then
+  gone=$(sort <<<"$locks" | comm -23 "$snap/locks-before" -)
+  [ -z "$gone" ] || while read -r line; do echo "  gone: $line"; done <<<"$gone"
+  check "other programs' locks still held" "$(echo -n "$gone" | grep -c .)" 0
+else
+  result "other programs' locks still held" 1 "PowerDevil doesn't answer"
+fi
 
 # Uninstall
 if [ -n "$bundle" ]; then
