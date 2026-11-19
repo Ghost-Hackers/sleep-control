@@ -66,7 +66,7 @@ The app keeps no settings and no state. The end-to-end script lists every file a
 
 ## Quit and kill at any moment
 
-Closing the app in any way must release the block, remove the socket and leave nothing to repair. The end-to-end script already runs Quit, SIGTERM and SIGKILL with the block on. Do these by hand on the final build:
+Closing the app in any way must release the block and leave nothing to repair. Quit and SIGTERM also remove the socket. SIGKILL leaves it, and the next start replaces it. The end-to-end script already runs Quit, SIGTERM and SIGKILL with the block on. Do these by hand on the final build:
 
 - Quit the app while a `now` is being refused.
 - Log out of the session with the block on and check PowerDevil's list afterwards.
