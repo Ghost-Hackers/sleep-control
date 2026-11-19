@@ -10,6 +10,7 @@ Copy this plan into the tracking issue of each release and fill it in before the
 - [Quit and kill at any moment](#quit-and-kill-at-any-moment)
 - [Upgrade and downgrade](#upgrade-and-downgrade)
 - [Attack plan](#attack-plan)
+- [Exceptions](#exceptions)
 - [Results](#results)
 
 ## Automated layers
@@ -90,6 +91,15 @@ Try to break the app. Note a result for each item. Anything that breaks becomes 
 - Compare the installed permissions with the manifest's list: `flatpak info --show-permissions io.github.ghost_hackers.sleep-control` against `finish-args` in [`io.github.ghost_hackers.sleep-control.yml`](../packaging/flatpak/io.github.ghost_hackers.sleep-control.yml). The KDE runtime adds read access to `xdg-config/kdeglobals` and talk access to `org.kde.kconfig.notify`, `org.kde.KGlobalSettings` and `com.canonical.AppMenu.Registrar` on its own. Anything else is a defect, and the list in the [README](../README.md) must match the manifest.
 - Check that nothing is built from input: the command line and socket handler never pass a received string to a shell, `eval` or a file path.
 
+## Exceptions
+
+Checks that are not run against the real service, with the reason. The tests use no test doubles.
+
+| Check | Why not | Proof |
+| --- | --- | --- |
+| A suspend started by `now` or Sleep now, in the script and the automated tests | A suspend stops the run that would check it, so both only run `now` under a block lock, where logind refuses it | [`tests/e2e/run.sh`](../tests/e2e/run.sh) and [`tests/test_state.py`](../tests/test_state.py) check that `CanSuspend` is `inhibited` first. The suspend itself is done by hand, see [Results](#results) |
+| The source lines in [`tests/unreachable.tsv`](../tests/unreachable.tsv) | No input, state or host reaches them | The file has the proof for each line, and the coverage gate fails when a listed line runs |
+
 ## Results
 
 Copy this table into the release issue and fill it in. Write the command or run you used in the notes, and link the log for anything that failed.
@@ -104,6 +114,7 @@ Copy this table into the release issue and fill it in. Write the command or run 
 | `tests/e2e/run.sh --reinstall`, second run | | |
 | Files the app wrote | | |
 | Quit, SIGTERM and SIGKILL by hand | | |
+| Sleep now by hand: the machine suspends and wakes with the block off | | |
 | Upgrade from the previous release | | |
 | Downgrade to the previous release | | |
 | Oversized and forged socket input | | |
