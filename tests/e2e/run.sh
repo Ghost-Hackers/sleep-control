@@ -448,6 +448,8 @@ stray=$(grep "^. $DATA/data/\|^. $DATA/config/\|^. $DATA/.local/state/\|^. $RUNT
   grep -vx -e "s $RUNTIME/control.sock" -e "f $RUNTIME/control.sock.lock" -e "f $DATA/config/kdeglobals" || true)
 [ -z "$stray" ] || while read -r line; do echo "  not expected: $line"; done <<<"$stray"
 check "no state or config file of its own" "$(grep -c . <<<"$stray")" 0
+check "the lock file and config/kdeglobals are empty" \
+  "$(find "$RUNTIME/control.sock.lock" "$DATA/config/kdeglobals" -size +0c 2>/dev/null | wc -l)" 0
 
 if locks=$(other_locks); then
   gone=$(sort <<<"$locks" | comm -23 "$snap/locks-before" -)
