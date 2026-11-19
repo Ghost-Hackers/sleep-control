@@ -424,10 +424,11 @@ echo "files the app wrote (new since the start, under $DATA and $RUNTIME):"
 comm -13 "$snap/files-before" "$snap/files-seen" | sed 's/^/  /'
 # The lock file stays after exit. The kernel drops the lock with the process, so the next start takes it again.
 # config/kdeglobals is empty: Flatpak creates it as the mount point for the desktop's file.
-# Every file counts, also one an earlier run left.
-stray=$(grep "^f $DATA/data/\|^f $DATA/config/\|^f $DATA/.local/state/\|^f $RUNTIME/" "$snap/files-seen" |
-  grep -vxc -e "f $RUNTIME/control.sock.lock" -e "f $DATA/config/kdeglobals" || true)
-check "no state or config file of its own" "$stray" 0
+# Every entry counts, whatever its type, also one an earlier run left.
+stray=$(grep "^. $DATA/data/\|^. $DATA/config/\|^. $DATA/.local/state/\|^. $RUNTIME/" "$snap/files-seen" |
+  grep -vx -e "s $RUNTIME/control.sock" -e "f $RUNTIME/control.sock.lock" -e "f $DATA/config/kdeglobals" || true)
+[ -z "$stray" ] || while read -r line; do echo "  not expected: $line"; done <<<"$stray"
+check "no state or config file of its own" "$(grep -c . <<<"$stray")" 0
 
 if locks=$(other_locks); then
   gone=$(sort <<<"$locks" | comm -23 "$snap/locks-before" -)
