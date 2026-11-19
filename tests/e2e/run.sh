@@ -46,10 +46,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Pids of the app's instances: the Python process the launcher starts in the sandbox.
+# Pids of this user's instances of the app: the Python process the launcher starts in the sandbox.
 app_pids() {
   local p
-  for p in $(pgrep -x python3); do
+  for p in $(pgrep -u "$(id -u)" -x python3); do
     if tr '\0' ' ' <"/proc/$p/cmdline" | grep -q -- '-m sleep_control'; then echo "$p"; fi
   done
 }
