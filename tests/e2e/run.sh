@@ -58,6 +58,7 @@ check() { # check <case> <got> <want>
 # made inside $(...) too.
 call() {
   local rc
+  echo " $(app_pids | tr '\n' ' ') " >"$snap/before"
   # No signal is taken between the start and its record. env gives the app the default signals back.
   trap '' INT TERM HUP
   timeout --kill-after="$2" "$1" env --default-signal=INT,TERM,HUP flatpak run "$ID" "${@:3}" &
@@ -65,8 +66,17 @@ call() {
   stop_on_signals
   wait "$!"
   rc=$?
+  record_new
   : >"$snap/call"
   return "$rc"
+}
+# An instance that is there after a call and was not there before it is this run's.
+record_new() {
+  local before p
+  before=$(cat "$snap/before")
+  for p in $(app_pids); do
+    case "$before" in *" $p "*) ;; *) echo "$p" >>"$snap/started" ;; esac
+  done
 }
 said() { "${APP[@]}" "$@"; echo "rc=$?"; } # what a command prints, then its exit status
 ok() { printf '%s\nrc=0' "$1"; }           # the same for a command that prints $1 and returns 0
@@ -88,6 +98,7 @@ wait_call() {
     kill -0 "$pid" 2>/dev/null || break
     sleep 0.3
   done
+  record_new
   note_started
 }
 # The lock has a session of its own: systemd-inhibit and its sleep.
@@ -128,8 +139,9 @@ app_pids() {
     '$2 == "FLOCK" && $3 == "ADVISORY" && $4 == "WRITE" && $5 > 0 && $6 == file { print $5 }' /proc/locks
 }
 instances() { app_pids | wc -l; }
-# The instances this run started. One that was running before is never touched.
-note_started() { started="$started $(app_pids | tr '\n' ' ')"; }
+# The instances this run started, from the records of its calls. One that was running before, or that someone
+# opens during the run, is never touched.
+note_started() { started=" $(tr '\n' ' ' <"$snap/started" 2>/dev/null)"; }
 stop_started() {
   local p
   for p in $(app_pids); do
