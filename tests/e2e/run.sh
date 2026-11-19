@@ -37,11 +37,17 @@ check() { # check <case> <got> <want>
 cli() { # cli <case> <command>: the command has to return 0
   "${APP[@]}" "$2" >/dev/null
   check "$1" "$?" 0
+  note_started
 }
 
 cleanup() {
-  [ -n "$holder" ] && kill -TERM "$holder" 2>/dev/null
-  stop_started
+  # The app goes before the lock, so a now that is still waiting in it can't suspend the machine.
+  if [ -n "$holder" ]; then
+    end_started
+    kill -TERM "$holder" 2>/dev/null
+  else
+    stop_started
+  fi
   rm -rf "$snap"
 }
 trap cleanup EXIT
@@ -61,6 +67,16 @@ stop_started() {
   for p in $(app_pids); do
     case " $started " in *" $p "*) kill -TERM "$p" 2>/dev/null ;; esac
   done
+}
+# Ends them for sure: SIGKILL for one that doesn't answer SIGTERM.
+end_started() {
+  local p
+  stop_started
+  wait_instances 0 10 && return 0
+  for p in $(app_pids); do
+    case " $started " in *" $p "*) kill -KILL "$p" 2>/dev/null ;; esac
+  done
+  wait_instances 0 5
 }
 
 # PowerDevil's inhibitions that belong to the app.
@@ -186,8 +202,8 @@ check "second launch hands over to the first" "$(instances)" 1
 wait_ours $((before + 1)) 10
 check "block still held after the second launch" "$(ours)" $((before + 1))
 
-# now, refused under a block lock of our own
-systemd-inhibit --what=sleep --mode=block --who=$LOCK_WHO --why="sleep-control e2e checks that now is refused" sleep 60 &
+# now, refused under a block lock of our own. The lock outlasts every call made under it.
+systemd-inhibit --what=sleep --mode=block --who=$LOCK_WHO --why="sleep-control e2e checks that now is refused" sleep 600 &
 holder=$!
 sleep 1
 state=$(busctl --system call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager CanSuspend | cut -d'"' -f2)
@@ -195,7 +211,10 @@ if systemd-inhibit --list --no-pager | grep -q "$LOCK_WHO" && [ "$state" = inhib
   err=$("${APP[@]}" now 2>&1 >/dev/null; echo "rc=$?")
   case "$err" in
     *"Operation denied due to active block inhibitor"*rc=1) result "now is refused under a block lock" 0 "logind refused it" ;;
-    *) result "now is refused under a block lock" 1 "$err" ;;
+    *)
+      result "now is refused under a block lock" 1 "$err"
+      # The request may still be waiting in the app, so the app goes before the lock does.
+      end_started ;;
   esac
   check "still running after the refused now" "$(instances)" 1
   wait_ours "$before" 5

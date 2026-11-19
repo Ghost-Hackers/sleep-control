@@ -53,7 +53,7 @@ It prints PASS or FAIL for each case and a total, and exits 1 when any case fail
 - No call of the app runs longer than 60 seconds. One that hangs fails its case.
 - A second launch returns 0 and hands over to the first instance.
 - The tray item is registered with the tray watcher.
-- With a block lock of its own in place, the script runs `now`. It must be refused, and nothing suspends. The script first checks that logind reports `CanSuspend` as `inhibited`, and fails without running `now` if it doesn't.
+- With a block lock of its own in place, the script runs `now`. It must be refused, and nothing suspends. The script first checks that logind reports `CanSuspend` as `inhibited`, and fails without running `now` if it doesn't. If `now` ends in any other way than that refusal, the script ends the app before it releases the lock.
 - The refused `now` has released the block, so the script turns it on again before the next case.
 - Quit from the tray menu and SIGTERM each remove the block and the socket. SIGKILL of the instance the script started removes the block and leaves the socket behind, which the script checks.
 - The app starts again over the stale socket SIGKILL left.
