@@ -148,8 +148,9 @@ check "--version matches the source" "$("${APP[@]}" --version)" "sleep-control $
 check "status with no instance" "$("${APP[@]}" status; echo "rc=$?")" "$(printf 'Sleep is allowed\nrc=0')"
 check "no instance was started by status" "$(instances)" 0
 
+# Bounded, so a start that hangs fails the check below.
 t0=$SECONDS
-out=$("${APP[@]}" on)
+out=$(timeout 30 "${APP[@]}" on)
 took=$((SECONDS - t0))
 note_started
 check "on starts the app in the background" "$out" "Sleep is blocked (kept awake)"
