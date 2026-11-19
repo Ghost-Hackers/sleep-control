@@ -58,8 +58,11 @@ check() { # check <case> <got> <want>
 # made inside $(...) too.
 call() {
   local rc
-  timeout --kill-after="$2" "$1" flatpak run "$ID" "${@:3}" &
+  # No signal is taken between the start and its record. env gives the app the default signals back.
+  trap '' INT TERM HUP
+  timeout --kill-after="$2" "$1" env --default-signal=INT,TERM,HUP flatpak run "$ID" "${@:3}" &
   echo "$!" >"$snap/call"
+  stop_on_signals
   wait "$!"
   rc=$?
   : >"$snap/call"
@@ -87,23 +90,34 @@ wait_call() {
   done
   note_started
 }
+# The lock has a session of its own: systemd-inhibit and its sleep.
+release_lock() {
+  local h=$holder
+  holder=""
+  [ -n "$h" ] || return 0
+  kill -TERM -- "-$h" 2>/dev/null
+  wait "$h" 2>/dev/null
+}
 cleanup() {
   # Runs to the end: a second Ctrl-C must not leave the app or the lock behind.
   trap '' INT TERM HUP
   wait_call
   # The app goes before the lock, so a now that is still waiting in it can't suspend the machine.
-  end_started
-  if [ -n "$holder" ]; then
-    # The lock has a session of its own: systemd-inhibit and its sleep.
-    kill -TERM -- "-$holder" 2>/dev/null
-    wait "$holder" 2>/dev/null
+  if end_started; then
+    release_lock
+  elif [ -n "$holder" ]; then
+    echo "$0: an instance did not end, so the sleep lock stays until it expires" >&2
   fi
   rm -rf "$snap"
 }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-trap 'exit 129' HUP
+# After the first signal the others are ignored, so the exit trap is not cut short.
+stop_on_signals() {
+  trap 'trap "" INT TERM HUP; exit 130' INT
+  trap 'trap "" INT TERM HUP; exit 143' TERM
+  trap 'trap "" INT TERM HUP; exit 129' HUP
+}
+stop_on_signals
 
 # Pids of the app's instances: the holder of the instance lock, from /proc/locks. It lists the locks of this pid
 # namespace only. A line looks like "1: FLOCK  ADVISORY  WRITE 1234 00:4d:5678 0 EOF"; a waiter has "->" after "1:".
@@ -279,19 +293,34 @@ check "block still held after the second launch" "$(ours)" $((before + 1))
 
 # now, refused under a block lock of our own. The lock outlasts every call made under it. In a session of its own,
 # Ctrl-C and a closed terminal don't reach it. setsid doesn't fork here, so $! is systemd-inhibit itself.
-setsid systemd-inhibit --what=sleep --mode=block --who=$LOCK_WHO --why="sleep-control e2e checks that now is refused" \
-  sleep 600 </dev/null &
+# No signal is taken between the start and holder=$!. env gives the lock the default signals back.
+trap '' INT TERM HUP
+setsid env --default-signal=INT,TERM,HUP systemd-inhibit --what=sleep --mode=block --who=$LOCK_WHO \
+  --why="sleep-control e2e checks that now is refused" sleep 600 </dev/null &
 holder=$!
-sleep 1
+stop_on_signals
+# This run's own lock, by its pid. One left by an earlier run doesn't count.
+lock_held() {
+  kill -0 "$holder" 2>/dev/null && systemd-inhibit --list --no-pager --no-legend |
+    awk -v who="$LOCK_WHO" -v pid="$holder" '$1 == who && $4 == pid { found = 1 } END { exit !found }'
+}
+for _ in $(seq 1 20); do
+  lock_held && break
+  sleep 0.5
+done
 state=$(busctl --system call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager CanSuspend | cut -d'"' -f2)
-if systemd-inhibit --list --no-pager | grep -q "$LOCK_WHO" && [ "$state" = inhibited ]; then
+if lock_held && [ "$state" = inhibited ]; then
   err=$("${APP[@]}" now 2>&1 >/dev/null; echo "rc=$?")
   case "$err" in
     *"Operation denied due to active block inhibitor"*rc=1) result "now is refused under a block lock" 0 "logind refused it" ;;
     *)
       result "now is refused under a block lock" 1 "$err"
       # The request may still be waiting in the app, so the app goes before the lock does.
-      end_started ;;
+      if ! end_started; then
+        echo "$0: an instance did not end, so the sleep lock stays until it expires" >&2
+        holder=""
+        exit 1
+      fi ;;
   esac
   check "still running after the refused now" "$(instances)" 1
   wait_ours "$before" 5
@@ -299,9 +328,7 @@ if systemd-inhibit --list --no-pager | grep -q "$LOCK_WHO" && [ "$state" = inhib
 else
   result "now is refused under a block lock" 1 "CanSuspend is '$state' under the lock, now was not called"
 fi
-kill -TERM -- "-$holder" 2>/dev/null
-wait "$holder" 2>/dev/null
-holder=""
+release_lock
 
 # Quit with the block on
 cli "on before Quit returns 0" on
