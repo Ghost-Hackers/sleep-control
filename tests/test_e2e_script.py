@@ -17,7 +17,8 @@ NEEDS = ("unshare", "ostree")
 
 APP = "io.github.ghost_hackers.sleep-control"
 SCRIPT = os.path.join(procs.ROOT, "tests", "e2e", "run.sh")
-NAMESPACE = ["unshare", "--user", "--map-current-user", "--pid", "--fork", "--mount-proc"]
+# --kill-child ends the namespace with unshare, also when a case times out.
+NAMESPACE = ["unshare", "--user", "--map-current-user", "--pid", "--fork", "--kill-child", "--mount-proc"]
 
 # Starts the app from this checkout ($1 is its interpreter, the rest are its arguments) in the runtime folder $2, runs
 # the script, and says if the app is still there.
