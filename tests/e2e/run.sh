@@ -16,7 +16,8 @@ case "${1:-}" in
   *) usage ;;
 esac
 ID=io.github.ghost_hackers.sleep-control
-APP=(flatpak run "$ID")
+# Every call is bounded. One that hangs ends with status 124 and fails its case.
+APP=(timeout 60 flatpak run "$ID")
 DATA=$HOME/.var/app/$ID
 RUNTIME=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/app/$ID
 LOCK_WHO=sleep-control-e2e
