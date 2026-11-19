@@ -13,8 +13,9 @@ import unittest
 from . import procs
 
 HOST = "flatpak"
-NEEDS = ("unshare",)
+NEEDS = ("unshare", "ostree")
 
+APP = "io.github.ghost_hackers.sleep-control"
 SCRIPT = os.path.join(procs.ROOT, "tests", "e2e", "run.sh")
 NAMESPACE = ["unshare", "--user", "--map-current-user", "--pid", "--fork", "--mount-proc"]
 
@@ -117,6 +118,39 @@ class BeforeTheAppTest(unittest.TestCase):
                                     name)
                 self.assertEqual(r.stdout.splitlines(), [f"rc {status}", "instance alive"], r.stderr)
                 self.assertEqual(os.listdir(tmpdir), [])
+
+    def bundle(self, name: str, arch: str, runtime: str) -> str:
+        """A bundle file of an empty app with this app's id, built for arch and asking for runtime."""
+        tree = os.path.join(self.tmp, f"{name}.tree")
+        os.makedirs(os.path.join(tree, "files"))
+        with open(os.path.join(tree, "metadata"), "w") as f:
+            f.write(f"[Application]\nname={APP}\nruntime={runtime}\n")
+        repo = os.path.join(self.tmp, f"{name}.repo")
+        path = os.path.join(self.tmp, f"{name}.flatpak")
+        for command in (["ostree", "init", f"--repo={repo}", "--mode=archive-z2"],
+                        ["ostree", "commit", f"--repo={repo}", f"--branch=app/{APP}/{arch}/master",
+                         f"--tree=dir={tree}", "--subject=test"],
+                        ["flatpak", "build-bundle", f"--arch={arch}", repo, path, APP, "master"]):
+            subprocess.run(command, check=True, capture_output=True)
+        return path
+
+    def test_reinstall_needs_a_bundle_that_can_put_the_app_back(self) -> None:
+        arch = subprocess.run(["flatpak", "--supported-arches"], check=True, capture_output=True,
+                              text=True).stdout.split()[0]
+        # The namespace's home folder is empty, so only the system installation's runtimes are found there.
+        runtimes = subprocess.run(["flatpak", "list", "--system", "--runtime", "--columns=ref"], check=True,
+                                  capture_output=True, text=True).stdout.split()
+        self.assertTrue(runtimes, "needs a runtime installed system-wide")
+        other_arch = self.bundle("other-arch", "sparc", runtimes[0])
+        no_runtime = self.bundle("no-runtime", arch, f"org.example.None/{arch}/1")
+        good = self.bundle("good", arch, runtimes[0])
+        cases = ((other_arch, f"{other_arch} is built for sparc, which this machine doesn't run"),
+                 (no_runtime, f"{no_runtime} needs the runtime org.example.None/{arch}/1, which is not installed"),
+                 (good, f"--reinstall needs {APP} installed with flatpak install --user"))
+        for path, message in cases:
+            with self.subTest(bundle=os.path.basename(path)):
+                r = self.run_inside("bash", "tests/e2e/run.sh", "--reinstall", path)
+                self.assertEqual((r.returncode, r.stdout, r.stderr), (2, "", f"tests/e2e/run.sh: {message}\n"))
 
     def test_arguments_are_checked_before_anything_runs(self) -> None:
         usage = "usage: tests/e2e/run.sh [--reinstall <bundle>]\n"

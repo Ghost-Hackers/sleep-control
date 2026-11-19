@@ -15,12 +15,25 @@ case "${1:-}" in
     bundle=$2
     [ -f "$bundle" ] || { echo "$0: no bundle file at $bundle" >&2; exit 2; }
     command -v ostree >/dev/null || { echo "$0: --reinstall needs ostree to check the bundle" >&2; exit 2; }
-    # The bundle has to hold this app, or the uninstall cases would leave the machine without it.
+    # The uninstall cases must be able to put the app back: the bundle holds this app for this machine, its runtime
+    # is installed, and the app is a user installation only.
     repo=$(mktemp -d)
-    refs=$(ostree init --repo="$repo" --mode=archive-z2 >/dev/null 2>&1 &&
+    ref=$(ostree init --repo="$repo" --mode=archive-z2 >/dev/null 2>&1 &&
       flatpak build-import-bundle "$repo" "$bundle" >/dev/null 2>&1 && ostree refs --repo="$repo")
+    grep -qx "app/${ID//./\\.}/[^/]*/[^/]*" <<<"$ref" || { rm -rf "$repo"; echo "$0: $bundle is not a Flatpak bundle of $ID" >&2; exit 2; }
+    runtime=$(ostree cat --repo="$repo" "$ref" /metadata 2>/dev/null | sed -n 's/^runtime=//p')
     rm -rf "$repo"
-    grep -q "^app/$ID/" <<<"$refs" || { echo "$0: $bundle is not a Flatpak bundle of $ID" >&2; exit 2; } ;;
+    arch=$(cut -d/ -f3 <<<"$ref")
+    flatpak --supported-arches | grep -qxF "$arch" ||
+      { echo "$0: $bundle is built for $arch, which this machine doesn't run" >&2; exit 2; }
+    { [ -n "$runtime" ] && flatpak info "$runtime" >/dev/null 2>&1; } ||
+      { echo "$0: $bundle needs the runtime ${runtime:-its metadata names}, which is not installed" >&2; exit 2; }
+    flatpak info --user "$ID" >/dev/null 2>&1 ||
+      { echo "$0: --reinstall needs $ID installed with flatpak install --user" >&2; exit 2; }
+    if flatpak info --system "$ID" >/dev/null 2>&1; then
+      echo "$0: $ID is also installed system-wide, and --reinstall only handles a user installation" >&2
+      exit 2
+    fi ;;
   *) usage ;;
 esac
 # Every call ends within 60 seconds: SIGTERM after 50, SIGKILL 10 later. A call that is ended fails its case.
@@ -347,16 +360,23 @@ check "other programs' locks still held" "$(echo -n "$gone" | grep -c .)" 0
 # Uninstall
 if [ -n "$bundle" ]; then
   flatpak uninstall --user -y "$ID" >/dev/null 2>&1
-  check "uninstall removes the app" "$(flatpak list --user --app --columns=application | grep -c "^$ID$")" 0
-  if [ -d "$DATA" ]; then echo "INFO uninstall without --delete-data leaves $DATA"; else echo "INFO uninstall without --delete-data removed $DATA"; fi
-  if flatpak install --user -y --bundle "$bundle" >/dev/null 2>&1; then
-    flatpak uninstall --user -y --delete-data "$ID" >/dev/null 2>&1
-    check "--delete-data removes $DATA" "$([ -d "$DATA" ] && echo present || echo gone)" gone
-    flatpak install --user -y --bundle "$bundle" >/dev/null 2>&1
-    check "the bundle installs again" "$?" 0
-    check "bundle installed again" "$(said --version)" "$(ok "sleep-control $want")"
+  check "uninstall returns 0" "$?" 0
+  installed=$(flatpak info "$ID" >/dev/null 2>&1 && echo installed || echo gone)
+  check "uninstall removes the app" "$installed" gone
+  if [ "$installed" != gone ]; then
+    echo "INFO the app is still installed, so the other uninstall cases are not run"
   else
-    result "the bundle installs after the uninstall" 1 "the app is not installed now; run: flatpak install --user --bundle $bundle"
+    if [ -d "$DATA" ]; then echo "INFO uninstall without --delete-data leaves $DATA"; else echo "INFO uninstall without --delete-data removed $DATA"; fi
+    if flatpak install --user -y --bundle "$bundle" >/dev/null 2>&1; then
+      flatpak uninstall --user -y --delete-data "$ID" >/dev/null 2>&1
+      check "uninstall --delete-data returns 0" "$?" 0
+      check "--delete-data removes $DATA" "$([ -d "$DATA" ] && echo present || echo gone)" gone
+      flatpak install --user -y --bundle "$bundle" >/dev/null 2>&1
+      check "the bundle installs again" "$?" 0
+      check "bundle installed again" "$(said --version)" "$(ok "sleep-control $want")"
+    else
+      result "the bundle installs after the uninstall" 1 "the app is not installed now; run: flatpak install --user --bundle $bundle"
+    fi
   fi
 else
   echo "uninstall cases not run (pass --reinstall <bundle>)"
