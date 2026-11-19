@@ -22,7 +22,7 @@ Copy this plan into the tracking issue of each release and fill it in before the
 | --- | --- |
 | `any` | `test_cli`, `test_instance`, `test_instance_race`, `test_runner`, `test_runner_bus`, `test_coverage_gate`, `test_version`, `test_packaging`, `test_check_release` |
 | `kde-session` | `test_state`, `test_window`, `test_session_app`, `test_stalls`, `test_desktop`, `test_desktop_race`, `test_portal_files` |
-`| `flatpak` | `test_flatpak` |`
+| `flatpak` | `test_flatpak` |
 
 ```sh
 tools/lint.sh
