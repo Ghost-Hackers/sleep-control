@@ -199,6 +199,7 @@ cli "on again returns 0" on
 sleep 6
 check "on twice adds no second block" "$(ours)" $((before + 1))
 check "status says blocked" "$(said status)" "$(ok "Sleep is blocked (kept awake)")"
+list_files "$snap/files-running"
 if tray_item >/dev/null; then result "tray item registered" 0 "$(tray_item)"; else result "tray item registered" 1; fi
 cli "off returns 0" off
 wait_ours "$before" 5
@@ -281,11 +282,13 @@ stop_app
 
 # What the app wrote
 list_files "$snap/files-after"
+# What was there while the app ran with the block on counts too, so a file it removes on exit is seen.
+sort -u "$snap/files-running" "$snap/files-after" >"$snap/files-seen"
 echo "files the app wrote (new since the start, under $DATA and $RUNTIME):"
-comm -13 "$snap/files-before" "$snap/files-after" | sed 's/^/  /'
+comm -13 "$snap/files-before" "$snap/files-seen" | sed 's/^/  /'
 # The lock file stays after exit. The kernel drops the lock with the process, so the next start takes it again.
 # config/kdeglobals is empty: Flatpak creates it as the mount point for the desktop's file.
-stray=$(comm -13 "$snap/files-before" "$snap/files-after" | grep "^f $DATA/data/\|^f $DATA/config/\|^f $RUNTIME/" |
+stray=$(comm -13 "$snap/files-before" "$snap/files-seen" | grep "^f $DATA/data/\|^f $DATA/config/\|^f $RUNTIME/" |
   grep -vxc -e "f $RUNTIME/control.sock.lock" -e "f $DATA/config/kdeglobals" || true)
 check "no state or config file of its own" "$stray" 0
 
