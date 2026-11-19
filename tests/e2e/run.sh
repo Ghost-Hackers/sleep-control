@@ -171,6 +171,7 @@ check "status says allowed" "$("${APP[@]}" status)" "Sleep is allowed"
 # Second launch
 "${APP[@]}" on >/dev/null
 timeout 20 "${APP[@]}" >/dev/null 2>&1
+check "second launch returns 0" "$?" 0
 check "second launch hands over to the first" "$(instances)" 1
 wait_ours $((before + 1)) 10
 check "block still held after the second launch" "$(ours)" $((before + 1))
