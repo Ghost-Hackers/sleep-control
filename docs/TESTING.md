@@ -55,7 +55,7 @@ It prints PASS or FAIL for each case and a total, and exits 1 when any case fail
 - The app starts again over the stale socket SIGKILL left.
 - The files the app wrote are listed (see below).
 
-With `--reinstall <bundle>` the script also uninstalls the app, reports that `~/.var/app/io.github.ghost_hackers.sleep-control` stays after a plain uninstall, checks that `--delete-data` removes it, and installs the bundle again. Without that option the uninstall cases don't run and the script says so, which makes the run safe on a machine you use. Run it twice before the release.
+The script checks its arguments and the bundle file before it starts anything. With `--reinstall <bundle>` it also uninstalls the app, reports that `~/.var/app/io.github.ghost_hackers.sleep-control` stays after a plain uninstall, checks that `--delete-data` removes it, and installs the bundle again. Without that option the uninstall cases don't run and the script says so, which makes the run safe on a machine you use. Run it twice before the release.
 
 ## What the app writes
 

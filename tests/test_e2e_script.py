@@ -55,6 +55,17 @@ class BeforeTheAppTest(unittest.TestCase):
         self.assertIn("A Sleep Control instance is running. Quit it first; this script starts its own.", r.stderr)
         self.assertEqual(r.stdout.splitlines(), ["rc 2", "instance alive"], r.stderr)
 
+    def test_arguments_are_checked_before_anything_runs(self) -> None:
+        usage = "usage: tests/e2e/run.sh [--reinstall <bundle>]\n"
+        missing = os.path.join(self.tmp, "missing.flatpak")
+        cases = ((("--reinstal", "x"), usage), (("--reinstall",), usage), (("--reinstall", "a", "b"), usage),
+                 (("x",), usage), (("",), usage),
+                 (("--reinstall", missing), f"tests/e2e/run.sh: no bundle file at {missing}\n"))
+        for args, message in cases:
+            with self.subTest(args=args):
+                r = self.run_inside("bash", "tests/e2e/run.sh", *args)
+                self.assertEqual((r.returncode, r.stdout, r.stderr), (2, "", message))
+
 
 if __name__ == "__main__":
     unittest.main()

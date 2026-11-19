@@ -5,6 +5,16 @@
 # Needs a KDE Plasma session with PowerDevil and the tray watcher, and logind.
 # Starts and stops the app itself: quit your own copy first. Never suspends the machine.
 set -u
+usage() { echo "usage: $0 [--reinstall <bundle>]" >&2; exit 2; }
+bundle=""
+case "${1:-}" in
+  "") [ $# -eq 0 ] || usage ;;
+  --reinstall)
+    [ $# -eq 2 ] || usage
+    bundle=$2
+    [ -f "$bundle" ] || { echo "$0: no bundle file at $bundle" >&2; exit 2; } ;;
+  *) usage ;;
+esac
 ID=io.github.ghost_hackers.sleep-control
 APP=(flatpak run "$ID")
 DATA=$HOME/.var/app/$ID
@@ -224,8 +234,7 @@ check "no state or config file of its own" "$stray" 0
 check "other sleep locks untouched" "$(systemd-inhibit --list --no-pager | grep -c "$lock_pattern")" "$locks_before"
 
 # Uninstall
-if [ "${1:-}" = --reinstall ]; then
-  bundle=${2:?--reinstall needs the bundle file}
+if [ -n "$bundle" ]; then
   flatpak uninstall --user -y "$ID" >/dev/null 2>&1
   check "uninstall removes the app" "$(flatpak list --user --app --columns=application | grep -c "^$ID$")" 0
   if [ -d "$DATA" ]; then echo "INFO uninstall without --delete-data leaves $DATA"; else echo "INFO uninstall without --delete-data removed $DATA"; fi
