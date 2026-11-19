@@ -1,8 +1,8 @@
-# Copied from Ghost-Hackers/ci-workflows@03cea4d1f45eaa24eeed0fd17d248b4da41c8d99 (sha256 df92c0e56367bd3154f3e05284c241301adb84719e1afc73e92dfc818e0ca324). Edit it there, not here.
-name: Review retarget
+# Copied from Ghost-Hackers/ci-workflows@5203ca51d5b16c9268881d795ac6c6d287a2c341 (sha256 b9dd8a59ba4ad36a745b298b2038847d6af1bfcd3a4e12fa2045f8eccad5d13e). Edit it there, not here.
+name: 🔁 Review retarget
 
 # A retarget keeps the head commit, so the review on that commit would stand against the old base. This reruns it.
-# A rerun keeps the original pull_request_target event, and "Find the pull request" reads the base live, so the
+# A rerun keeps the original pull_request_target event, and "📥 Find the pull request" reads the base live, so the
 # rerun checks out and diffs against the new base.
 #
 # The caller sends only edited events here, and the reviews never get them: a skipped required check counts as
@@ -29,7 +29,7 @@ jobs:
       actions: write
       checks: read
     steps:
-      - name: Rerun the review of the head commit
+      - name: 🔁 Rerun the review of the head commit
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha }}
@@ -63,7 +63,7 @@ jobs:
             # A run's pull_requests only lists pull requests whose head matches the run, and it can be empty. Then the
             # run can't be tied to this pull request, and skipping it would leave its review green against the old base.
             if [ -z "$prs" ]; then
-              echo "::error::Run $id on ${SHA:0:7} lists no pull request, so it can't be tied to #$NUMBER; use Re-run all jobs on the review run of #$NUMBER"
+              echo "::error::❌ Run $id on ${SHA:0:7} lists no pull request, so it can't be tied to #$NUMBER; use Re-run all jobs on the review run of #$NUMBER"
               exit 1
             fi
             # Two pull requests can share a head commit. A rerun keeps its run's pull request, so it has to be this one.
@@ -72,7 +72,7 @@ jobs:
               *) echo "Run $id reviewed pull request $prs, not #$NUMBER; skipping it"; continue ;;
             esac
             if [ "$prs" != "$NUMBER" ]; then
-              echo "::error::Run $id on ${SHA:0:7} belongs to pull requests $prs, so it can't tell which one it reviewed; use Re-run all jobs on the review run of #$NUMBER"
+              echo "::error::❌ Run $id on ${SHA:0:7} belongs to pull requests $prs, so it can't tell which one it reviewed; use Re-run all jobs on the review run of #$NUMBER"
               exit 1
             fi
             run=$id
@@ -80,10 +80,11 @@ jobs:
           done
           if [ -z "$run" ]; then
             echo "No review of #$NUMBER on ${SHA:0:7} to rerun; a review still to start reads the new base itself"
+            echo "⏭️ No review of #$NUMBER on ${SHA:0:7} to rerun" >> "$GITHUB_STEP_SUMMARY" || true
             exit 0
           fi
           if [ "$event" != pull_request_target ]; then
-            echo "::error::The review on ${SHA:0:7} came from run $run, started by $event, not pull_request_target"
+            echo "::error::❌ The review on ${SHA:0:7} came from run $run, started by $event, not pull_request_target"
             exit 1
           fi
           # A run that is still going can't be rerun. Its result would be for the old base, so cancel it first.
@@ -98,3 +99,4 @@ jobs:
           fi
           gh run rerun "$run" -R "$GITHUB_REPOSITORY"
           echo "Rerunning the review in run $run against the new base"
+          echo "🔁 Reran the review in run $run against the new base" >> "$GITHUB_STEP_SUMMARY" || true
