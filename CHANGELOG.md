@@ -26,7 +26,7 @@ All notable changes to Sleep Control are listed here. The format follows [Keep a
 ### Security
 
 - The control socket and its folder can be read by your user only.
-- The Flatpak has no network access and no access to your files. It asks only for the display, the tray watcher and logind.
+- The Flatpak has no network access and asks for none of your files. It asks only for the display, the tray watcher and logind. The KDE runtime it is built on adds read access to `~/.config/kdeglobals`, so Qt follows your theme and fonts.
 
 [Unreleased]: https://github.com/Ghost-Hackers/sleep-control/compare/v0.1.0-beta.1...HEAD
 [0.1.0-beta.1]: https://github.com/Ghost-Hackers/sleep-control/releases/tag/v0.1.0-beta.1
