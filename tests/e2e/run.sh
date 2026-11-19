@@ -74,7 +74,8 @@ call() {
   return "$rc"
 }
 # An instance is this run's when it was not there before a call, is there after it, and the command line started it:
-# only that start passes --background. One opened from the menu during a call is left alone.
+# only that start passes --background. A window opened from the menu during a call is left alone. An on from another
+# terminal or from the launcher's Keep awake action during a call can't be told apart from the run's own.
 record_new() {
   local before p
   before=$(cat "$snap/before")
@@ -161,8 +162,7 @@ except (FileNotFoundError, ConnectionRefusedError):
 except OSError:
     pass' "$RUNTIME/control.sock"
 }
-# The instances this run started, from the records of its calls. One that was running before, or that someone
-# opens during the run, is never touched.
+# The instances this run started, from the records of its calls. One that was running before is never touched.
 note_started() { started=" $(tr '\n' ' ' <"$snap/started")"; }
 stop_started() {
   local p
