@@ -33,6 +33,10 @@ result() { # result <case> <ok:0|1> <note>
 check() { # check <case> <got> <want>
   if [ "$2" = "$3" ]; then result "$1" 0 "$2"; else result "$1" 1 "got '$2', want '$3'"; fi
 }
+cli() { # cli <case> <command>: the command has to return 0
+  "${APP[@]}" "$2" >/dev/null
+  check "$1" "$?" 0
+}
 
 cleanup() {
   [ -n "$holder" ] && kill -TERM "$holder" 2>/dev/null
@@ -158,18 +162,18 @@ if [ "$took" -le 8 ]; then result "on returns within a few seconds" 0 "${took} s
 check "one instance after on" "$(instances)" 1
 wait_ours $((before + 1)) 10
 check "block appears in PowerDevil's list" "$(ours)" $((before + 1))
-"${APP[@]}" on >/dev/null
+cli "on again returns 0" on
 sleep 6
 check "on twice adds no second block" "$(ours)" $((before + 1))
 check "status says blocked" "$("${APP[@]}" status)" "Sleep is blocked (kept awake)"
 if tray_item >/dev/null; then result "tray item registered" 0 "$(tray_item)"; else result "tray item registered" 1; fi
-"${APP[@]}" off >/dev/null
+cli "off returns 0" off
 wait_ours "$before" 5
 check "off removes the block" "$(ours)" "$before"
 check "status says allowed" "$("${APP[@]}" status)" "Sleep is allowed"
 
 # Second launch
-"${APP[@]}" on >/dev/null
+cli "on before the second launch returns 0" on
 timeout 20 "${APP[@]}" >/dev/null 2>&1
 check "second launch returns 0" "$?" 0
 check "second launch hands over to the first" "$(instances)" 1
@@ -198,7 +202,7 @@ wait "$holder" 2>/dev/null
 holder=""
 
 # Quit with the block on
-"${APP[@]}" on >/dev/null
+cli "on before Quit returns 0" on
 wait_ours $((before + 1)) 10
 check "block on before Quit" "$(ours)" $((before + 1))
 if tray_quit; then
@@ -236,7 +240,7 @@ check "SIGKILL releases the block" "$(ours)" "$before"
 check "SIGKILL leaves the socket behind" "$(find "$RUNTIME" -name '*.sock' 2>/dev/null | wc -l)" 1
 start_app
 check "the app starts again over the stale socket" "$("${APP[@]}" status)" "Sleep is blocked (kept awake)"
-"${APP[@]}" off >/dev/null
+cli "off at the end returns 0" off
 stop_app
 
 # What the app wrote
