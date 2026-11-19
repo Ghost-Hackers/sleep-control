@@ -4,12 +4,43 @@ If you find a security problem in Sleep Control, report it privately through [Re
 
 <p align="center"><a href="https://github.com/Ghost-Hackers/sleep-control/security/advisories/new"><img src="https://img.shields.io/badge/Report%20a%20vulnerability-d1242f?style=plastic&amp;logo=github" alt="Report a vulnerability"></a></p>
 
-Include the commit or version you used, your distro and desktop, and the steps that show the problem.
+Include the version (`flatpak run io.github.ghost_hackers.sleep-control --version`), your distro and desktop, and the steps that show the problem.
+
+## Contents
+
+- [What to report](#what-to-report)
+- [Verify a download](#verify-a-download)
 
 ## What to report
 
-There is no release yet, so for now that means anything in this repository that could harm someone who checks it out or runs its scripts: a script that writes outside the repository or its `.venv`, a pinned dependency with a known vulnerability, or a secret committed by mistake.
+The app holds one sleep block through the Inhibit portal and listens on a socket in your runtime directory. Reports we want:
 
-Once releases exist, fixes go into the latest release and the latest pre-release.
+- A block that stays after you quit the app or after it crashes.
+- The command line or the socket accepting input from another user.
+- Flatpak permissions beyond the ones listed in the [README](README.md#how-it-works).
+
+Fixes go into the latest release and the affected pre-release(s).
+
+## Verify a download
+
+Release files are built by GitHub Actions from the tag, with an attestation that names the commit and the workflow run. With the [GitHub CLI](https://cli.github.com/) installed:
+
+```sh
+gh attestation verify sleep-control-<version>.flatpak --repo Ghost-Hackers/sleep-control
+```
+
+The check passes only for the exact file the workflow built. To rule out a damaged download, compare it against the `.sha256` file attached to the same release:
+
+```sh
+sha256sum -c sleep-control-<version>.flatpak.sha256
+```
+
+The build is reproducible, so you can also rebuild a release from its tag and compare. The same tag gives the same bundle, byte for byte, as long as the SDK and BaseApp commits that [`tools/build.sh`](tools/build.sh) prints match the release build's:
+
+```sh
+git checkout v<version>
+tools/build.sh
+sha256sum dist/sleep-control-<version>.flatpak
+```
 
 [![Back to top](https://img.shields.io/badge/Back%20to%20top-222?style=plastic&logo=github)](#security)
