@@ -51,6 +51,8 @@ snap=$(mktemp -d)
 result() { # result <case> <ok:0|1> <note>
   if [ "$2" -eq 0 ]; then pass=$((pass + 1)); echo "PASS $1${3:+ ($3)}"
   else fail=$((fail + 1)); echo "FAIL $1${3:+ ($3)}"; fi
+  # The app's folders are listed after every case, for the check of what the app wrote.
+  list_files >>"$snap/files-cases"
 }
 check() { # check <case> <got> <want>
   if [ "$2" = "$3" ]; then result "$1" 0 "$2"; else result "$1" 1 "got '$2', want '$3'"; fi
@@ -262,8 +264,8 @@ walk(json.load(sys.stdin)["data"][1])') || return 1
   busctl --user -- call "$service" "$menu" com.canonical.dbusmenu Event isvu "$id" clicked i 0 0 >/dev/null
 }
 
-list_files() { # list_files <outfile>
-  { find "$DATA" "$RUNTIME" -printf '%y %p\n' 2>/dev/null; } | sort >"$1"
+list_files() { # type and path of everything in the app's folders
+  find "$DATA" "$RUNTIME" -printf '%y %p\n' 2>/dev/null | sort
 }
 
 start_app() {
@@ -290,7 +292,7 @@ if [ "$rc" -ne 0 ] || ! before=$(ours); then
   exit 2
 fi
 sort <<<"$locks" >"$snap/locks-before"
-list_files "$snap/files-before"
+list_files >"$snap/files-before"
 echo "inhibitions of the app before: $before"
 
 # Command line
@@ -315,7 +317,6 @@ cli "on again returns 0" on
 sleep 6
 check "on twice adds no second block" "$(ours)" $((before + 1))
 check "status says blocked" "$(said status)" "$(ok "Sleep is blocked (kept awake)")"
-list_files "$snap/files-running"
 if tray_item >/dev/null; then result "tray item registered" 0 "$(tray_item)"; else result "tray item registered" 1; fi
 cli "off returns 0" off
 wait_ours "$before" 5
@@ -419,9 +420,10 @@ stop_app
 check "the app ends at the end of the run" "$(instances)" 0
 
 # What the app wrote
-list_files "$snap/files-after"
-# What was there while the app ran with the block on counts too, so a file it removes on exit is seen.
-sort -u "$snap/files-running" "$snap/files-after" >"$snap/files-seen"
+# The listings after every case count too, so an entry the app removes later in the run is seen. One that is written
+# and removed again within a single case is not.
+list_files >>"$snap/files-cases"
+sort -u "$snap/files-cases" >"$snap/files-seen"
 echo "files the app wrote (new since the start, under $DATA and $RUNTIME):"
 comm -13 "$snap/files-before" "$snap/files-seen" | sed 's/^/  /'
 # The lock file stays after exit. The kernel drops the lock with the process, so the next start takes it again.
