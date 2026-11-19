@@ -59,7 +59,7 @@ It prints PASS or FAIL for each case and a total, and exits 1 when any case fail
 - The app starts again over the stale socket SIGKILL left.
 - The app has ended at the end of the run, before the files are listed.
 - The files the app wrote are listed (see below).
-- The locks other programs held at the start, in logind and in PowerDevil, are still held at the end.
+- The locks other programs held at the start, in logind and in PowerDevil, are still held at the end. If `systemd-inhibit` can't list logind's locks, the script exits with status 2 before it starts anything, and this check fails if it can't at the end.
 
 The script checks its arguments before it starts anything. `--reinstall <bundle>` needs `ostree`. The bundle has to hold this app for an architecture the machine runs, the runtime it names has to be installed, and the app has to be installed with `flatpak install --user` and not system-wide. Otherwise the script exits with status 2 and says which of these failed. If the bundle does not install after the first uninstall, the script stops there and says how to install the app again. It prints that command whenever it exits with the app not installed. With `--reinstall <bundle>` it also uninstalls the app, checks that the uninstall returns 0 and that `flatpak info` no longer finds the app, reports that `~/.var/app/io.github.ghost_hackers.sleep-control` stays after a plain uninstall, checks that `--delete-data` removes it, and installs the bundle again. Without that option the uninstall cases don't run and the script says so, which makes the run safe on a machine you use. Run it twice before the release.
 

@@ -199,8 +199,8 @@ class BeforeTheAppTest(unittest.TestCase):
                 r = self.run_inside("bash", "tests/e2e/run.sh", *args)
                 self.assertEqual((r.returncode, r.stdout, r.stderr), (2, "", message))
 
-    def test_reinstall_without_ostree_says_so(self) -> None:
-        # A PATH with a link to every program but ostree.
+    def path_without(self, program: str) -> str:
+        """A PATH with a link to every program but this one."""
         folder = os.path.join(self.tmp, "bin")
         os.mkdir(folder)
         for directory in os.environ.get("PATH", "").split(os.pathsep):
@@ -209,11 +209,19 @@ class BeforeTheAppTest(unittest.TestCase):
             for name in os.listdir(directory):
                 target = os.path.join(directory, name)
                 link = os.path.join(folder, name)
-                if name != "ostree" and not os.path.lexists(link) and os.access(target, os.X_OK):
+                if name != program and not os.path.lexists(link) and os.access(target, os.X_OK):
                     os.symlink(target, link)
+        return folder
+
+    def test_the_run_needs_the_list_of_logind_locks(self) -> None:
+        r = self.run_inside("bash", "tests/e2e/run.sh", path=self.path_without("systemd-inhibit"))
+        self.assertEqual((r.returncode, r.stdout, r.stderr),
+                         (2, "", "tests/e2e/run.sh: systemd-inhibit doesn't list logind's locks\n"))
+
+    def test_reinstall_without_ostree_says_so(self) -> None:
         bundle = os.path.join(self.tmp, "any.flatpak")
         open(bundle, "w").close()
-        r = self.run_inside("bash", "tests/e2e/run.sh", "--reinstall", bundle, path=folder)
+        r = self.run_inside("bash", "tests/e2e/run.sh", "--reinstall", bundle, path=self.path_without("ostree"))
         self.assertEqual((r.returncode, r.stdout, r.stderr),
                          (2, "", "tests/e2e/run.sh: --reinstall needs ostree to check the bundle\n"))
 

@@ -196,10 +196,11 @@ ours() {
   grep -o "\"$ID\"" <<<"$list" | wc -l
 }
 # Other programs' locks, one per line: logind's without this script's own, PowerDevil's without the app's.
-# Fails without an answer from PowerDevil.
+# Returns 2 when systemd-inhibit doesn't list logind's, and 1 without an answer from PowerDevil.
 other_locks() {
   local list
-  systemd-inhibit --list --no-pager --no-legend | grep -v "^$LOCK_WHO " | tr -s ' ' | sed 's/^/logind /'
+  list=$(systemd-inhibit --list --no-pager --no-legend 2>/dev/null) || return 2
+  grep -v -e "^$LOCK_WHO " -e '^$' <<<"$list" | tr -s ' ' | sed 's/^/logind /'
   list=$(list_inhibitions --json=short 2>/dev/null) || return 1
   python3 -I -c '
 import json, sys
@@ -276,7 +277,13 @@ if [ "$(instances)" -ne 0 ] || listening; then
   echo "A Sleep Control instance is running. Quit it first; this script starts its own." >&2
   exit 2
 fi
-if ! before=$(ours) || ! locks=$(other_locks); then
+locks=$(other_locks)
+rc=$?
+if [ "$rc" -eq 2 ]; then
+  echo "$0: systemd-inhibit doesn't list logind's locks" >&2
+  exit 2
+fi
+if [ "$rc" -ne 0 ] || ! before=$(ours); then
   echo "$0: PowerDevil doesn't answer on the session bus" >&2
   exit 2
 fi
@@ -427,7 +434,7 @@ if locks=$(other_locks); then
   [ -z "$gone" ] || while read -r line; do echo "  gone: $line"; done <<<"$gone"
   check "other programs' locks still held" "$(echo -n "$gone" | grep -c .)" 0
 else
-  result "other programs' locks still held" 1 "PowerDevil doesn't answer"
+  result "other programs' locks still held" 1 "logind or PowerDevil doesn't answer"
 fi
 
 # Uninstall
