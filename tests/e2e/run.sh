@@ -45,6 +45,7 @@ pass=0
 fail=0
 holder=""
 started=""
+held=""
 snap=$(mktemp -d)
 : >"$snap/started"
 
@@ -62,11 +63,12 @@ check() { # check <case> <got> <want>
 call() {
   local rc
   echo " $(app_pids | tr '\n' ' ') " >"$snap/before"
-  # No signal is taken between the start and its record. env gives the app the default signals back.
-  trap '' INT TERM HUP
+  # A signal between the start and its record is held and sent again after it. env starts the app with the default
+  # signals.
+  hold_signals
   timeout --kill-after="$2" "$1" env --default-signal=INT,TERM,HUP flatpak run "$ID" "${@:3}" &
   echo "$!" >"$snap/call"
-  stop_on_signals
+  take_signals
   wait "$!"
   rc=$?
   record_new
@@ -139,6 +141,18 @@ stop_on_signals() {
   trap 'trap "" INT TERM HUP; exit 129' HUP
 }
 stop_on_signals
+# hold_signals keeps a signal that arrives, and take_signals sends it again. Between the two the script starts a
+# process and records its pid, so the cleanup knows what was started.
+hold_signals() {
+  held=""
+  trap 'held=INT' INT
+  trap 'held=TERM' TERM
+  trap 'held=HUP' HUP
+}
+take_signals() {
+  stop_on_signals
+  [ -z "$held" ] || kill -s "$held" "$BASHPID"
+}
 
 # Pids of the app's instances: the holder of the instance lock, from /proc/locks. It lists the locks of this pid
 # namespace only. A line looks like "1: FLOCK  ADVISORY  WRITE 1234 00:4d:5678 0 EOF"; a waiter has "->" after "1:".
@@ -333,12 +347,13 @@ check "block still held after the second launch" "$(ours)" $((before + 1))
 
 # now, refused under a block lock of our own. The lock outlasts every call made under it. In a session of its own,
 # Ctrl-C and a closed terminal don't reach it. setsid doesn't fork here, so $! is systemd-inhibit itself.
-# No signal is taken between the start and holder=$!. env gives the lock the default signals back.
-trap '' INT TERM HUP
+# A signal between the start and holder=$! is held and sent again after it. env starts the lock with the default
+# signals.
+hold_signals
 setsid env --default-signal=INT,TERM,HUP systemd-inhibit --what=sleep --mode=block --who=$LOCK_WHO \
   --why="sleep-control e2e checks that now is refused" sleep 600 </dev/null &
 holder=$!
-stop_on_signals
+take_signals
 # This run's own lock, by its pid. One left by an earlier run doesn't count.
 lock_held() {
   kill -0 "$holder" 2>/dev/null && systemd-inhibit --list --no-pager --no-legend |
