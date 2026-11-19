@@ -144,6 +144,19 @@ app_pids() {
     '$2 == "FLOCK" && $3 == "ADVISORY" && $4 == "WRITE" && $5 > 0 && $6 == file { print $5 }' /proc/locks
 }
 instances() { app_pids | wc -l; }
+# Something answers on the control socket. An instance whose lock file was removed shows only here. Nothing is sent.
+listening() {
+  python3 -I -c '
+import socket, sys
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(5)
+try:
+    s.connect(sys.argv[1])
+except (FileNotFoundError, ConnectionRefusedError):
+    sys.exit(1)
+except OSError:
+    pass' "$RUNTIME/control.sock"
+}
 # The instances this run started, from the records of its calls. One that was running before, or that someone
 # opens during the run, is never touched.
 note_started() { started=" $(tr '\n' ' ' <"$snap/started")"; }
@@ -259,7 +272,7 @@ start_app() {
 stop_app() { stop_started; wait_instances 0 10; }
 
 # Before anything runs.
-if [ "$(instances)" -ne 0 ]; then
+if [ "$(instances)" -ne 0 ] || listening; then
   echo "A Sleep Control instance is running. Quit it first; this script starts its own." >&2
   exit 2
 fi

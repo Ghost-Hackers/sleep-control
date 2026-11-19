@@ -40,6 +40,17 @@ if kill -0 "$pid" 2>/dev/null; then echo "instance alive"; else echo "instance g
 kill -TERM "$pid" 2>/dev/null
 """
 
+# The same with the instance's lock file removed once it answers. The instance runs on, and that file no longer
+# leads to it in /proc/locks.
+WITHOUT_ITS_LOCK_FILE = WITH_AN_INSTANCE.replace("bash tests/e2e/run.sh\n", r"""for _ in $(seq 1 100); do
+  "$python" -c 'import sys; from tests import procs; procs.answer(sys.argv[1], b"status\n")' "$runtime" \
+    2>/dev/null && break
+  sleep 0.2
+done
+rm "$runtime/app/io.github.ghost_hackers.sleep-control/control.sock.lock"
+bash tests/e2e/run.sh
+""")
+
 # Runs the script ($1 is the bus address), starts an instance once the script is past its instance check and waits
 # on the session bus, then sends the signal ($2) to the script's process group, as Ctrl-C or a closed terminal does.
 INTERRUPTED = r"""
@@ -103,6 +114,12 @@ class BeforeTheAppTest(unittest.TestCase):
         # Started without "-m sleep_control" on its command line, the instance still holds the lock.
         start = "import runpy; runpy.run_module('sleep_control', run_name='__main__', alter_sys=True)"
         r = self.run_inside("bash", "-c", WITH_AN_INSTANCE, "bash", sys.executable, self.tmp, "-c", start)
+        self.assertIn("A Sleep Control instance is running. Quit it first; this script starts its own.", r.stderr)
+        self.assertEqual(r.stdout.splitlines(), ["rc 2", "instance alive"], r.stderr)
+
+    def test_an_instance_without_its_lock_file_is_found_by_its_socket(self) -> None:
+        r = self.run_inside("bash", "-c", WITHOUT_ITS_LOCK_FILE, "bash", sys.executable, self.tmp, "-m",
+                            "sleep_control")
         self.assertIn("A Sleep Control instance is running. Quit it first; this script starts its own.", r.stderr)
         self.assertEqual(r.stdout.splitlines(), ["rc 2", "instance alive"], r.stderr)
 
