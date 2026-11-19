@@ -13,6 +13,7 @@ LOCK_WHO=sleep-control-e2e
 pass=0
 fail=0
 holder=""
+started=""
 snap=$(mktemp -d)
 
 result() { # result <case> <ok:0|1> <note>
@@ -25,7 +26,7 @@ check() { # check <case> <got> <want>
 
 cleanup() {
   [ -n "$holder" ] && kill -TERM "$holder" 2>/dev/null
-  for p in $(app_pids); do kill -TERM "$p" 2>/dev/null; done
+  stop_started
   rm -rf "$snap"
 }
 trap cleanup EXIT
@@ -38,6 +39,14 @@ app_pids() {
   done
 }
 instances() { app_pids | wc -l; }
+# The instances this run started. One that was running before is never touched.
+note_started() { started="$started $(app_pids | tr '\n' ' ')"; }
+stop_started() {
+  local p
+  for p in $(app_pids); do
+    case " $started " in *" $p "*) kill -TERM "$p" 2>/dev/null ;; esac
+  done
+}
 
 # PowerDevil's inhibitions that belong to the app.
 list_inhibitions() {
@@ -101,8 +110,8 @@ list_files() { # list_files <outfile>
   { find "$DATA" "$RUNTIME" -printf '%y %p\n' 2>/dev/null; } | sort >"$1"
 }
 
-start_app() { "${APP[@]}" on >/dev/null 2>&1; wait_instances 1 10; }
-stop_app() { for p in $(app_pids); do kill -TERM "$p" 2>/dev/null; done; wait_instances 0 10; }
+start_app() { "${APP[@]}" on >/dev/null 2>&1; wait_instances 1 10; note_started; }
+stop_app() { stop_started; wait_instances 0 10; }
 
 # Before anything runs.
 if [ "$(instances)" -ne 0 ]; then
@@ -121,9 +130,10 @@ check "--version matches the source" "$("${APP[@]}" --version)" "sleep-control $
 check "status with no instance" "$("${APP[@]}" status; echo "rc=$?")" "$(printf 'Sleep is allowed\nrc=0')"
 check "no instance was started by status" "$(instances)" 0
 
-started=$SECONDS
+t0=$SECONDS
 out=$("${APP[@]}" on)
-took=$((SECONDS - started))
+took=$((SECONDS - t0))
+note_started
 check "on starts the app in the background" "$out" "Sleep is blocked (kept awake)"
 if [ "$took" -le 8 ]; then result "on returns within a few seconds" 0 "${took} s"; else result "on returns within a few seconds" 1 "${took} s"; fi
 check "one instance after on" "$(instances)" 1

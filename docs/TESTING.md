@@ -22,7 +22,7 @@ Copy this plan into the tracking issue of each release and fill it in before the
 | --- | --- |
 | `any` | `test_cli`, `test_instance`, `test_instance_race`, `test_runner`, `test_runner_bus`, `test_coverage_gate`, `test_version`, `test_packaging`, `test_check_release` |
 | `kde-session` | `test_state`, `test_window`, `test_session_app`, `test_stalls`, `test_desktop`, `test_desktop_race`, `test_portal_files` |
-| `flatpak` | `test_flatpak` |
+| `flatpak` | `test_flatpak`, `test_e2e_script` |
 
 ```sh
 tools/lint.sh
@@ -34,7 +34,7 @@ tools/test.sh --coverage
 
 ## End-to-end run
 
-[`tests/e2e/run.sh`](../tests/e2e/run.sh) drives the installed Flatpak through `flatpak run`, with a real PowerDevil, tray watcher and logind. Install the release bundle first, quit any copy of the app you have running, then:
+[`tests/e2e/run.sh`](../tests/e2e/run.sh) drives the installed Flatpak through `flatpak run`, with a real PowerDevil, tray watcher and logind. It refuses to run while an instance is open and leaves that one alone. Install the release bundle first, quit any copy of the app you have running, then:
 
 ```sh
 flatpak install --user -y --bundle dist/sleep-control-<version>.flatpak
