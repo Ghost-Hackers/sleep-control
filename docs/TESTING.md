@@ -118,7 +118,9 @@ Copy this table into the release issue and fill it in. Write the command or run 
 | `tests/e2e/run.sh --reinstall`, first run | | |
 | `tests/e2e/run.sh --reinstall`, second run | | |
 | Files the app wrote | | |
-| Quit, SIGTERM and SIGKILL by hand | | |
+| Quit while a `now` is being refused | | |
+| Log out with the block on, then PowerDevil's list | | |
+| `flatpak uninstall --user` while the app runs with the block on | | |
 | Sleep now by hand: the machine suspends and wakes with the block off | | |
 | Upgrade from the previous release | | |
 | Downgrade to the previous release | | |
