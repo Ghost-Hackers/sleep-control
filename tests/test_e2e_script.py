@@ -5,6 +5,7 @@ is neither seen nor signalled.
 """
 
 import os
+import socket
 import subprocess
 import sys
 import unittest
@@ -36,6 +37,41 @@ if kill -0 "$pid" 2>/dev/null; then echo "instance alive"; else echo "instance g
 kill -TERM "$pid" 2>/dev/null
 """
 
+# Runs the script ($1 is the bus address), starts an instance once the script is past its instance check and waits
+# on the session bus, then sends the signal ($2) to the script's process group, as Ctrl-C or a closed terminal does.
+INTERRUPTED = r"""
+import os, signal, subprocess, sys, time
+from tests import procs
+
+runtime = os.environ["XDG_RUNTIME_DIR"]
+script = subprocess.Popen(["bash", "tests/e2e/run.sh"], env=dict(os.environ, DBUS_SESSION_BUS_ADDRESS=sys.argv[1]),
+                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, process_group=0)
+def waiting_on_the_bus():
+    for p in os.listdir("/proc"):
+        try:
+            if p.isdigit() and open(f"/proc/{p}/comm").read() == "busctl\n":
+                return True
+        except OSError:
+            pass
+    return False
+deadline = time.monotonic() + 20
+while not waiting_on_the_bus() and time.monotonic() < deadline:
+    time.sleep(0.1)
+app = subprocess.Popen(["dbus-run-session", "--", sys.executable, "-m", "sleep_control"],
+                       env=dict(os.environ, PYTHONPATH="src", QT_QPA_PLATFORM="offscreen"),
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       start_new_session=True)
+while not procs.lock_holder(runtime) and time.monotonic() < deadline:
+    time.sleep(0.1)
+pid = procs.lock_holder(runtime)
+os.killpg(script.pid, getattr(signal, sys.argv[2]))
+print("rc", script.wait(timeout=60))
+time.sleep(1)
+print("instance alive" if pid and procs.lock_holder(runtime) == pid else "instance gone")
+os.killpg(app.pid, signal.SIGTERM)
+app.wait(timeout=10)
+"""
+
 
 class BeforeTheAppTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -57,6 +93,22 @@ class BeforeTheAppTest(unittest.TestCase):
                 self.assertIn("A Sleep Control instance is running. Quit it first; this script starts its own.",
                               r.stderr)
                 self.assertEqual(r.stdout.splitlines(), ["rc 2", "instance alive"], r.stderr)
+
+    def test_an_interrupt_stops_the_run_and_leaves_an_instance_alone(self) -> None:
+        # The bus takes the connection and never answers, so busctl waits in the run for 90 seconds.
+        bus = os.path.join(self.tmp, "bus")
+        listener = socket.socket(socket.AF_UNIX)
+        self.addCleanup(listener.close)
+        listener.bind(bus)
+        listener.listen(16)
+        tmpdir = os.path.join(self.tmp, "tmpdir")
+        os.mkdir(tmpdir)
+        for name, status in (("SIGINT", 130), ("SIGTERM", 143), ("SIGHUP", 129)):
+            with self.subTest(signal=name):
+                r = self.run_inside("env", f"TMPDIR={tmpdir}", sys.executable, "-c", INTERRUPTED, f"unix:path={bus}",
+                                    name)
+                self.assertEqual(r.stdout.splitlines(), [f"rc {status}", "instance alive"], r.stderr)
+                self.assertEqual(os.listdir(tmpdir), [])
 
     def test_arguments_are_checked_before_anything_runs(self) -> None:
         usage = "usage: tests/e2e/run.sh [--reinstall <bundle>]\n"

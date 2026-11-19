@@ -24,7 +24,7 @@ case "${1:-}" in
   *) usage ;;
 esac
 # Every call ends within 60 seconds: SIGTERM after 50, SIGKILL 10 later. A call that is ended fails its case.
-APP=(timeout --kill-after=10 50 flatpak run "$ID")
+APP=(call 50 10)
 DATA=$HOME/.var/app/$ID
 RUNTIME=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/app/$ID
 LOCK_WHO=sleep-control-e2e
@@ -41,6 +41,17 @@ result() { # result <case> <ok:0|1> <note>
 check() { # check <case> <got> <want>
   if [ "$2" = "$3" ]; then result "$1" 0 "$2"; else result "$1" 1 "got '$2', want '$3'"; fi
 }
+# call <secs> <kill-after> <args>: runs the app with a limit. The pid goes to a file, so the exit trap sees a call
+# made inside $(...) too.
+call() {
+  local rc
+  timeout --kill-after="$2" "$1" flatpak run "$ID" "${@:3}" &
+  echo "$!" >"$snap/call"
+  wait "$!"
+  rc=$?
+  : >"$snap/call"
+  return "$rc"
+}
 said() { "${APP[@]}" "$@"; echo "rc=$?"; } # what a command prints, then its exit status
 ok() { printf '%s\nrc=0' "$1"; }           # the same for a command that prints $1 and returns 0
 cli() { # cli <case> <command>: the command has to return 0
@@ -49,17 +60,37 @@ cli() { # cli <case> <command>: the command has to return 0
   note_started
 }
 
+# A call still running ends within its limit. Waiting for it beats ending it: an on that is cut short can still start
+# the app, and a now that finds no app suspends the machine itself.
+wait_call() {
+  local pid
+  pid=$(cat "$snap/call" 2>/dev/null)
+  [ -n "$pid" ] || return 0
+  echo "waiting for the call of the app that is still running" >&2
+  wait "$pid" 2>/dev/null
+  for _ in $(seq 1 210); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.3
+  done
+  note_started
+}
 cleanup() {
+  # Runs to the end: a second Ctrl-C must not leave the app or the lock behind.
+  trap '' INT TERM HUP
+  wait_call
   # The app goes before the lock, so a now that is still waiting in it can't suspend the machine.
+  end_started
   if [ -n "$holder" ]; then
-    end_started
-    kill -TERM "$holder" 2>/dev/null
-  else
-    stop_started
+    # The lock has a session of its own: systemd-inhibit and its sleep.
+    kill -TERM -- "-$holder" 2>/dev/null
+    wait "$holder" 2>/dev/null
   fi
   rm -rf "$snap"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 # Pids of this user's instances of the app. The sandbox runs it as python3, a source checkout may run it as python.
 app_pids() {
@@ -80,6 +111,7 @@ stop_started() {
 # Ends them for sure: SIGKILL for one that doesn't answer SIGTERM.
 end_started() {
   local p
+  [ -n "${started// /}" ] || return 0
   stop_started
   wait_instances 0 10 && return 0
   for p in $(app_pids); do
@@ -185,7 +217,7 @@ check "no instance was started by status" "$(instances)" 0
 
 # Bounded, so a start that hangs fails the check below.
 t0=$SECONDS
-out=$(timeout --kill-after=5 25 flatpak run "$ID" on)
+out=$(call 25 5 on)
 rc=$?
 took=$((SECONDS - t0))
 note_started
@@ -208,14 +240,16 @@ check "status says allowed" "$(said status)" "$(ok "Sleep is allowed")"
 
 # Second launch
 cli "on before the second launch returns 0" on
-timeout --kill-after=5 15 flatpak run "$ID" >/dev/null 2>&1
+call 15 5 >/dev/null 2>&1
 check "second launch returns 0" "$?" 0
 check "second launch hands over to the first" "$(instances)" 1
 wait_ours $((before + 1)) 10
 check "block still held after the second launch" "$(ours)" $((before + 1))
 
-# now, refused under a block lock of our own. The lock outlasts every call made under it.
-systemd-inhibit --what=sleep --mode=block --who=$LOCK_WHO --why="sleep-control e2e checks that now is refused" sleep 600 &
+# now, refused under a block lock of our own. The lock outlasts every call made under it. In a session of its own,
+# Ctrl-C and a closed terminal don't reach it. setsid doesn't fork here, so $! is systemd-inhibit itself.
+setsid systemd-inhibit --what=sleep --mode=block --who=$LOCK_WHO --why="sleep-control e2e checks that now is refused" \
+  sleep 600 </dev/null &
 holder=$!
 sleep 1
 state=$(busctl --system call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager CanSuspend | cut -d'"' -f2)
@@ -234,7 +268,7 @@ if systemd-inhibit --list --no-pager | grep -q "$LOCK_WHO" && [ "$state" = inhib
 else
   result "now is refused under a block lock" 1 "CanSuspend is '$state' under the lock, now was not called"
 fi
-kill -TERM "$holder" 2>/dev/null
+kill -TERM -- "-$holder" 2>/dev/null
 wait "$holder" 2>/dev/null
 holder=""
 
