@@ -16,8 +16,8 @@ case "${1:-}" in
   *) usage ;;
 esac
 ID=io.github.ghost_hackers.sleep-control
-# Every call is bounded. One that hangs ends with status 124 and fails its case.
-APP=(timeout 60 flatpak run "$ID")
+# Every call ends within 60 seconds: SIGTERM after 50, SIGKILL 10 later. A call that is ended fails its case.
+APP=(timeout --kill-after=10 50 flatpak run "$ID")
 DATA=$HOME/.var/app/$ID
 RUNTIME=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/app/$ID
 LOCK_WHO=sleep-control-e2e
@@ -176,7 +176,7 @@ check "no instance was started by status" "$(instances)" 0
 
 # Bounded, so a start that hangs fails the check below.
 t0=$SECONDS
-out=$(timeout 30 "${APP[@]}" on)
+out=$(timeout --kill-after=5 25 flatpak run "$ID" on)
 took=$((SECONDS - t0))
 note_started
 check "on starts the app in the background" "$out" "Sleep is blocked (kept awake)"
@@ -196,7 +196,7 @@ check "status says allowed" "$("${APP[@]}" status)" "Sleep is allowed"
 
 # Second launch
 cli "on before the second launch returns 0" on
-timeout 20 "${APP[@]}" >/dev/null 2>&1
+timeout --kill-after=5 15 flatpak run "$ID" >/dev/null 2>&1
 check "second launch returns 0" "$?" 0
 check "second launch hands over to the first" "$(instances)" 1
 wait_ours $((before + 1)) 10
