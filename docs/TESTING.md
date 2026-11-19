@@ -57,6 +57,7 @@ It prints PASS or FAIL for each case and a total, and exits 1 when any case fail
 - The refused `now` has released the block, so the script turns it on again before the next case.
 - Quit from the tray menu and SIGTERM each remove the block and the socket. SIGKILL of the instance the script started removes the block and leaves the socket behind, which the script checks.
 - The app starts again over the stale socket SIGKILL left.
+- The app has ended at the end of the run, before the files are listed.
 - The files the app wrote are listed (see below).
 - The locks other programs held at the start, in logind and in PowerDevil, are still held at the end.
 

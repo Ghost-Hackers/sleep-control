@@ -350,6 +350,7 @@ start_app
 check "the app starts again over the stale socket" "$(said status)" "$(ok "Sleep is blocked (kept awake)")"
 cli "off at the end returns 0" off
 stop_app
+check "the app ends at the end of the run" "$(instances)" 0
 
 # What the app wrote
 list_files "$snap/files-after"
