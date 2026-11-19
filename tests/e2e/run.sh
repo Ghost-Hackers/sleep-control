@@ -451,7 +451,7 @@ if [ -n "$bundle" ]; then
   if [ "$installed" != gone ]; then
     echo "INFO the app is still installed, so the other uninstall cases are not run"
   else
-    if [ -d "$DATA" ]; then echo "INFO uninstall without --delete-data leaves $DATA"; else echo "INFO uninstall without --delete-data removed $DATA"; fi
+    check "uninstall without --delete-data leaves $DATA" "$([ -d "$DATA" ] && echo present || echo gone)" present
     if flatpak install --user -y --bundle "$bundle" >/dev/null 2>&1; then
       flatpak uninstall --user -y --delete-data "$ID" >/dev/null 2>&1
       check "uninstall --delete-data returns 0" "$?" 0
