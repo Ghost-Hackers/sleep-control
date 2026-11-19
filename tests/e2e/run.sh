@@ -119,6 +119,9 @@ cleanup() {
   elif [ -n "$holder" ]; then
     echo "$0: an instance did not end, so the sleep lock stays until it expires" >&2
   fi
+  if [ -n "$bundle" ] && ! flatpak info "$ID" >/dev/null 2>&1; then
+    echo "$0: the app is not installed now; run: flatpak install --user --bundle $bundle" >&2
+  fi
   rm -rf "$snap"
 }
 trap cleanup EXIT

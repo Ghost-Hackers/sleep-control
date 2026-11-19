@@ -79,10 +79,12 @@ class BeforeTheAppTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = procs.runtime_dir(self)
 
-    def run_inside(self, *command: str) -> subprocess.CompletedProcess[str]:
+    def run_inside(self, *command: str, path: str = "") -> subprocess.CompletedProcess[str]:
         """Runs command in the namespace, away from the session bus and the installed app."""
         env = dict(os.environ, HOME=self.tmp, XDG_RUNTIME_DIR=self.tmp,
                    DBUS_SESSION_BUS_ADDRESS=f"unix:path={self.tmp}/none")
+        if path:
+            env["PATH"] = path
         return subprocess.run([*NAMESPACE, *command], env=env, cwd=procs.ROOT, stdin=subprocess.DEVNULL,
                               capture_output=True, text=True, timeout=120)
 
@@ -178,6 +180,24 @@ class BeforeTheAppTest(unittest.TestCase):
             with self.subTest(args=args):
                 r = self.run_inside("bash", "tests/e2e/run.sh", *args)
                 self.assertEqual((r.returncode, r.stdout, r.stderr), (2, "", message))
+
+    def test_reinstall_without_ostree_says_so(self) -> None:
+        # A PATH with a link to every program but ostree.
+        folder = os.path.join(self.tmp, "bin")
+        os.mkdir(folder)
+        for directory in os.environ.get("PATH", "").split(os.pathsep):
+            if not os.path.isdir(directory):
+                continue
+            for name in os.listdir(directory):
+                target = os.path.join(directory, name)
+                link = os.path.join(folder, name)
+                if name != "ostree" and not os.path.lexists(link) and os.access(target, os.X_OK):
+                    os.symlink(target, link)
+        bundle = os.path.join(self.tmp, "any.flatpak")
+        open(bundle, "w").close()
+        r = self.run_inside("bash", "tests/e2e/run.sh", "--reinstall", bundle, path=folder)
+        self.assertEqual((r.returncode, r.stdout, r.stderr),
+                         (2, "", "tests/e2e/run.sh: --reinstall needs ostree to check the bundle\n"))
 
 
 if __name__ == "__main__":
