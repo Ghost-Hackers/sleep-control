@@ -71,12 +71,14 @@ call() {
   : >"$snap/call"
   return "$rc"
 }
-# An instance that is there after a call and was not there before it is this run's.
+# An instance is this run's when it was not there before a call, is there after it, and the command line started it:
+# only that start passes --background. One opened from the menu during a call is left alone.
 record_new() {
   local before p
   before=$(cat "$snap/before")
   for p in $(app_pids); do
-    case "$before" in *" $p "*) ;; *) echo "$p" >>"$snap/started" ;; esac
+    case "$before" in *" $p "*) continue ;; esac
+    if tr '\0' '\n' <"/proc/$p/cmdline" 2>/dev/null | grep -qx -e --background; then echo "$p" >>"$snap/started"; fi
   done
 }
 said() { "${APP[@]}" "$@"; echo "rc=$?"; } # what a command prints, then its exit status
