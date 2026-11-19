@@ -5,6 +5,7 @@
 # Needs a KDE Plasma session with PowerDevil and the tray watcher, and logind.
 # Starts and stops the app itself: quit your own copy first. Never suspends the machine.
 set -u
+ID=io.github.ghost_hackers.sleep-control
 usage() { echo "usage: $0 [--reinstall <bundle>]" >&2; exit 2; }
 bundle=""
 case "${1:-}" in
@@ -12,10 +13,16 @@ case "${1:-}" in
   --reinstall)
     [ $# -eq 2 ] || usage
     bundle=$2
-    [ -f "$bundle" ] || { echo "$0: no bundle file at $bundle" >&2; exit 2; } ;;
+    [ -f "$bundle" ] || { echo "$0: no bundle file at $bundle" >&2; exit 2; }
+    command -v ostree >/dev/null || { echo "$0: --reinstall needs ostree to check the bundle" >&2; exit 2; }
+    # The bundle has to hold this app, or the uninstall cases would leave the machine without it.
+    repo=$(mktemp -d)
+    refs=$(ostree init --repo="$repo" --mode=archive-z2 >/dev/null 2>&1 &&
+      flatpak build-import-bundle "$repo" "$bundle" >/dev/null 2>&1 && ostree refs --repo="$repo")
+    rm -rf "$repo"
+    grep -q "^app/$ID/" <<<"$refs" || { echo "$0: $bundle is not a Flatpak bundle of $ID" >&2; exit 2; } ;;
   *) usage ;;
 esac
-ID=io.github.ghost_hackers.sleep-control
 # Every call ends within 60 seconds: SIGTERM after 50, SIGKILL 10 later. A call that is ended fails its case.
 APP=(timeout --kill-after=10 50 flatpak run "$ID")
 DATA=$HOME/.var/app/$ID
@@ -291,11 +298,15 @@ if [ -n "$bundle" ]; then
   flatpak uninstall --user -y "$ID" >/dev/null 2>&1
   check "uninstall removes the app" "$(flatpak list --user --app --columns=application | grep -c "^$ID$")" 0
   if [ -d "$DATA" ]; then echo "INFO uninstall without --delete-data leaves $DATA"; else echo "INFO uninstall without --delete-data removed $DATA"; fi
-  flatpak install --user -y --bundle "$bundle" >/dev/null 2>&1
-  flatpak uninstall --user -y --delete-data "$ID" >/dev/null 2>&1
-  check "--delete-data removes $DATA" "$([ -d "$DATA" ] && echo present || echo gone)" gone
-  flatpak install --user -y --bundle "$bundle" >/dev/null 2>&1
-  check "bundle installed again" "$(said --version)" "$(ok "sleep-control $want")"
+  if flatpak install --user -y --bundle "$bundle" >/dev/null 2>&1; then
+    flatpak uninstall --user -y --delete-data "$ID" >/dev/null 2>&1
+    check "--delete-data removes $DATA" "$([ -d "$DATA" ] && echo present || echo gone)" gone
+    flatpak install --user -y --bundle "$bundle" >/dev/null 2>&1
+    check "the bundle installs again" "$?" 0
+    check "bundle installed again" "$(said --version)" "$(ok "sleep-control $want")"
+  else
+    result "the bundle installs after the uninstall" 1 "the app is not installed now; run: flatpak install --user --bundle $bundle"
+  fi
 else
   echo "uninstall cases not run (pass --reinstall <bundle>)"
 fi

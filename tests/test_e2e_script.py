@@ -61,9 +61,17 @@ class BeforeTheAppTest(unittest.TestCase):
     def test_arguments_are_checked_before_anything_runs(self) -> None:
         usage = "usage: tests/e2e/run.sh [--reinstall <bundle>]\n"
         missing = os.path.join(self.tmp, "missing.flatpak")
+        empty = os.path.join(self.tmp, "empty.flatpak")
+        text = os.path.join(self.tmp, "text.flatpak")
+        open(empty, "w").close()
+        with open(text, "w") as f:
+            f.write("not a bundle\n")
+        other = "is not a Flatpak bundle of io.github.ghost_hackers.sleep-control\n"
         cases = ((("--reinstal", "x"), usage), (("--reinstall",), usage), (("--reinstall", "a", "b"), usage),
                  (("x",), usage), (("",), usage),
-                 (("--reinstall", missing), f"tests/e2e/run.sh: no bundle file at {missing}\n"))
+                 (("--reinstall", missing), f"tests/e2e/run.sh: no bundle file at {missing}\n"),
+                 (("--reinstall", empty), f"tests/e2e/run.sh: {empty} {other}"),
+                 (("--reinstall", text), f"tests/e2e/run.sh: {text} {other}"))
         for args, message in cases:
             with self.subTest(args=args):
                 r = self.run_inside("bash", "tests/e2e/run.sh", *args)

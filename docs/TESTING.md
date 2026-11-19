@@ -60,7 +60,7 @@ It prints PASS or FAIL for each case and a total, and exits 1 when any case fail
 - The files the app wrote are listed (see below).
 - The locks other programs held at the start, in logind and in PowerDevil, are still held at the end.
 
-The script checks its arguments and the bundle file before it starts anything. With `--reinstall <bundle>` it also uninstalls the app, reports that `~/.var/app/io.github.ghost_hackers.sleep-control` stays after a plain uninstall, checks that `--delete-data` removes it, and installs the bundle again. Without that option the uninstall cases don't run and the script says so, which makes the run safe on a machine you use. Run it twice before the release.
+The script checks its arguments, and that the bundle file holds this app, before it starts anything. If the bundle does not install after the first uninstall, the script stops there and says how to install the app again. With `--reinstall <bundle>` it also uninstalls the app, reports that `~/.var/app/io.github.ghost_hackers.sleep-control` stays after a plain uninstall, checks that `--delete-data` removes it, and installs the bundle again. Without that option the uninstall cases don't run and the script says so, which makes the run safe on a machine you use. Run it twice before the release.
 
 ## What the app writes
 
