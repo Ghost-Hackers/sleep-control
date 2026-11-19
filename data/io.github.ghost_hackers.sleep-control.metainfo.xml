@@ -35,7 +35,7 @@
   </supports>
   <content_rating type="oars-1.1"/>
   <releases>
-    <release version="0.1.0-beta.1" date="2026-11-16" type="development">
+    <release version="0.1.0-beta.1" date="2026-11-19" type="development">
       <description>
         <p>First beta of the Flatpak app: tray icon, window and terminal commands, with the block held through the Inhibit portal.</p>
       </description>
