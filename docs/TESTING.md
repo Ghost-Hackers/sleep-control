@@ -52,7 +52,7 @@ It prints PASS or FAIL for each case and a total, and exits 1 when any case fail
 - The tray item is registered with the tray watcher.
 - With a block lock of its own in place, the script runs `now`. It must be refused, and nothing suspends. The script first checks that logind reports `CanSuspend` as `inhibited`, and fails without running `now` if it doesn't.
 - The refused `now` has released the block, so the script turns it on again before the next case.
-- Quit from the tray menu, SIGTERM and SIGKILL of the instance the script started each remove the block and the socket.
+- Quit from the tray menu and SIGTERM each remove the block and the socket. SIGKILL of the instance the script started removes the block and leaves the socket behind.
 - The app starts again over the stale socket SIGKILL left.
 - The files the app wrote are listed (see below).
 - The locks other programs held at the start, in logind and in PowerDevil, are still held at the end.
